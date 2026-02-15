@@ -1,5 +1,10 @@
-import dotenv from 'dotenv';
-dotenv.config();
+// 1. Require and configure dotenv at the VERY TOP
+require('dotenv').config();
+// 4. Startup validation for WEBHOOK_SECRET
+if (!process.env.WEBHOOK_SECRET) {
+  console.error('❌ WEBHOOK_SECRET environment variable is required. Set it in backend/.env and restart the server.');
+  process.exit(1);
+}
 
 import express from 'express';
 import cors from 'cors';
@@ -13,7 +18,6 @@ import { initializeDatabase } from './src/config/database.js';
 // Initialize database
 initializeDatabase().then(async () => {
   logger.info('Database initialized successfully');
-  
   // Seed database with sample data (only in development)
   if (process.env.NODE_ENV !== 'production') {
     try {

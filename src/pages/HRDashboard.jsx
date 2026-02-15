@@ -1,26 +1,55 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { TrendingUp, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import apiService from '../services/api'
+import socket from '../services/socket'
 
-const deliveryForecastData = [
-  { month: 'Jan', onTime: 85, delayed: 15 },
-  { month: 'Feb', onTime: 88, delayed: 12 },
-  { month: 'Mar', onTime: 82, delayed: 18 },
-  { month: 'Apr', onTime: 90, delayed: 10 },
-  { month: 'May', onTime: 87, delayed: 13 },
-  { month: 'Jun', onTime: 92, delayed: 8 },
-]
-
-const highRiskProjects = [
-  { name: 'E-commerce Platform', risk: 92, status: 'Critical', deadline: '2024-03-15' },
-  { name: 'Mobile App Redesign', risk: 78, status: 'High', deadline: '2024-02-28' },
-  { name: 'API Integration', risk: 65, status: 'Medium', deadline: '2024-03-30' },
-  { name: 'Database Migration', risk: 58, status: 'Medium', deadline: '2024-04-10' },
-]
 
 export const HRDashboard = () => {
+  const [stats, setStats] = useState({
+    total: 0,
+    riskScore: 0,
+    onTrack: 0,
+    delayed: 0,
+  });
+  const [deliveryForecastData, setDeliveryForecastData] = useState([]);
+  const [highRiskProjects, setHighRiskProjects] = useState([]);
+
+  // Fetch initial data
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const analytics = await apiService.getTeamAnalytics();
+        setStats({
+          total: analytics.totalProjects,
+          riskScore: analytics.riskScore || 0,
+          onTrack: analytics.onTrackProjects || 0,
+          delayed: analytics.delayedProjects || 0,
+        });
+        setDeliveryForecastData(analytics.deliveryForecast || []);
+        setHighRiskProjects(analytics.highRiskProjects || []);
+      } catch (e) {
+        // fallback or error handling
+      }
+    }
+    fetchData();
+    socket.connect();
+    return () => { socket.disconnect(); };
+  }, []);
+
+  // Listen for real-time updates
+  useEffect(() => {
+    function handleRealtimeUpdate(data) {
+      if (data.stats) setStats(data.stats);
+      if (data.deliveryForecast) setDeliveryForecastData(data.deliveryForecast);
+      if (data.highRiskProjects) setHighRiskProjects(data.highRiskProjects);
+    }
+    socket.on('hr-dashboard-update', handleRealtimeUpdate);
+    return () => { socket.off('hr-dashboard-update', handleRealtimeUpdate); };
+  }, []);
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -30,7 +59,6 @@ export const HRDashboard = () => {
       }
     }
   }
-
   const itemVariants = {
     hidden: { y: 20, opacity: 0 },
     visible: {
@@ -41,7 +69,6 @@ export const HRDashboard = () => {
       }
     }
   }
-
   return (
     <motion.div
       variants={containerVariants}
@@ -53,7 +80,6 @@ export const HRDashboard = () => {
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">HR Dashboard</h1>
         <p className="text-gray-600">Project health overview and risk assessment</p>
       </div>
-
       {/* Stats Grid - Responsive */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <motion.div variants={itemVariants}>
@@ -62,7 +88,7 @@ export const HRDashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Total Projects</p>
-                  <p className="text-xl sm:text-2xl font-semibold text-gray-900 mt-1">24</p>
+                  <p className="text-xl sm:text-2xl font-semibold text-gray-900 mt-1">{stats.total}</p>
                 </div>
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
                   <TrendingUp className="text-indigo-600" size={20} />
@@ -71,14 +97,13 @@ export const HRDashboard = () => {
             </CardContent>
           </Card>
         </motion.div>
-
         <motion.div variants={itemVariants}>
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Risk Score</p>
-                  <p className="text-xl sm:text-2xl font-semibold text-red-600 mt-1">73.2</p>
+                  <p className="text-xl sm:text-2xl font-semibold text-red-600 mt-1">{stats.riskScore}</p>
                 </div>
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center">
                   <AlertTriangle className="text-red-600" size={20} />
@@ -87,14 +112,13 @@ export const HRDashboard = () => {
             </CardContent>
           </Card>
         </motion.div>
-
         <motion.div variants={itemVariants}>
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">On Track</p>
-                  <p className="text-xl sm:text-2xl font-semibold text-green-600 mt-1">18</p>
+                  <p className="text-xl sm:text-2xl font-semibold text-green-600 mt-1">{stats.onTrack}</p>
                 </div>
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
                   <CheckCircle className="text-green-600" size={20} />
@@ -103,14 +127,13 @@ export const HRDashboard = () => {
             </CardContent>
           </Card>
         </motion.div>
-
         <motion.div variants={itemVariants}>
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600">Delayed</p>
-                  <p className="text-xl sm:text-2xl font-semibold text-yellow-600 mt-1">6</p>
+                  <p className="text-xl sm:text-2xl font-semibold text-yellow-600 mt-1">{stats.delayed}</p>
                 </div>
                 <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
                   <Clock className="text-yellow-600" size={20} />

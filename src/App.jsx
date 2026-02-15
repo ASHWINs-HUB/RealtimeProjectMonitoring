@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { MainLayout } from '@/layouts/MainLayout'
 import { Login } from '@/pages/Login'
@@ -15,14 +15,32 @@ import { RepositoryPage } from '@/pages/RepositoryPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { useAuthStore } from '@/store/authStore'
 
+
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated } = useAuthStore()
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
+  const { isAuthenticated, isLoading, user, login, setLoading } = useAuthStore();
+  useEffect(() => {
+    // On mount, check for token and fetch user if needed
+    const token = localStorage.getItem('token');
+    if (token && !user) {
+      setLoading(true);
+      fetch('/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(res => res.ok ? res.json() : Promise.reject())
+        .then(data => {
+          if (data.user) login(data.user);
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }
+  }, []);
+  if (isLoading) {
+    return <div style={{textAlign:'center',marginTop:'20vh'}}>Loading...</div>;
   }
-  
-  return children
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
 }
 
 const RoleBasedRoute = ({ children, requiredRole }) => {
