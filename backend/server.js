@@ -1,13 +1,32 @@
-import express from 'express';
 import dotenv from 'dotenv';
+dotenv.config();
+
+import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import projectRoutes from './src/routes/projectRoutes.js';
 import errorHandler from './src/middleware/errorHandler.js';
 import logger from './src/utils/logger.js';
+import { initializeDatabase } from './src/config/database.js';
 
-dotenv.config();
+// Initialize database
+initializeDatabase().then(async () => {
+  logger.info('Database initialized successfully');
+  
+  // Seed database with sample data (only in development)
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const { seedDatabase } = await import('./src/utils/seeder.js');
+      await seedDatabase();
+    } catch (error) {
+      logger.warn('Database seeding failed (data might already exist):', error.message);
+    }
+  }
+}).catch(error => {
+  logger.error('Failed to initialize database:', error);
+  process.exit(1);
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
