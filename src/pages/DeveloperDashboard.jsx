@@ -303,3 +303,5 @@ export const DeveloperDashboard = () => {
     </motion.div>
   )
 }
+
+export default DeveloperDashboard

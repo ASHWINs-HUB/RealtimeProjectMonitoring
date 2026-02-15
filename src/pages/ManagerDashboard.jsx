@@ -271,3 +271,5 @@ export const ManagerDashboard = () => {
     </motion.div>
   )
 }
+
+export default ManagerDashboard

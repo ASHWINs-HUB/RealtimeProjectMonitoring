@@ -3,6 +3,24 @@ const ProjectModel = require('../models/projectModel');
 const TeamMemberModel = require('../models/teamMemberModel');
 const jiraService = require('../services/jiraService');
 
+exports.getProjects = async (req, res, next) => {
+  try {
+    const projects = await ProjectModel.all();
+    res.json(projects);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getJiraProjects = async (req, res, next) => {
+  try {
+    const jiraProjects = await jiraService.getProjects();
+    res.json(jiraProjects);
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.createProject = async (req, res, next) => {
   try {
     const { jira_project_key, jira_project_name, description, repo_name, private: repoPrivate, team_members } = req.body;
@@ -11,10 +29,12 @@ exports.createProject = async (req, res, next) => {
     // 1) Create project in JIRA automatically so analytics can pull data immediately
     let jiraResult = null;
     try {
+      console.log('Attempting to create Jira project with key:', jira_project_key);
       jiraResult = await jiraService.createProject(jira_project_key, jira_project_name);
+      console.log('Jira project created successfully:', jiraResult);
     } catch (jiraErr) {
       // Log but don't block DB insert — still allow creating project record locally
-      console.warn('JIRA project creation failed:', jiraErr.message || jiraErr);
+      console.warn('JIRA project creation failed:', jiraErr.response?.data || jiraErr.message);
     }
 
     // 2) Persist basic project record in DB
@@ -35,8 +55,19 @@ exports.createProject = async (req, res, next) => {
     }
 
     // 4) Return created project plus JIRA response (if available)
-    return res.status(201).json({ project, jira: jiraResult });
-  } catch (err) { next(err); }
+    const response = { project };
+    if (jiraResult) {
+      response.jira = jiraResult;
+      response.message = 'Project created successfully in both database and Jira';
+    } else {
+      response.message = 'Project created in database. Jira creation failed - check logs';
+    }
+    
+    return res.status(201).json(response);
+  } catch (err) { 
+    console.error('Project creation failed:', err);
+    next(err); 
+  }
 };
 
 exports.approveProject = async (req, res, next) => {
@@ -60,6 +91,47 @@ exports.addBranches = async (req, res, next) => {
     // This would call GitHub API in real impl
     res.json({ message: 'Branches defined (mock)' });
   } catch (err) { next(err); }
+};
+
+exports.getOffers = async (req, res, next) => {
+  try {
+    const { projectId } = req.params;
+    const offers = await ProjectModel.getOffersByProject(projectId);
+    res.json(offers);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.acceptOffer = async (req, res, next) => {
+  try {
+    const { offerId } = req.params;
+    const updated = await ProjectModel.updateOfferStatus(offerId, 'ACCEPTED');
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.rejectOffer = async (req, res, next) => {
+  try {
+    const { offerId } = req.params;
+    const updated = await ProjectModel.updateOfferStatus(offerId, 'REJECTED');
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.updateGitHubRepo = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { repo_url, repo_name } = req.body;
+    const updated = await ProjectModel.updateGitHubRepo(id, repo_url, repo_name);
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
 };
 
 exports.addTeamMember = async (req, res, next) => {

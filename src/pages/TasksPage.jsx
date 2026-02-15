@@ -201,3 +201,5 @@ export const TasksPage = () => {
     </motion.div>
   )
 }
+
+export default TasksPage

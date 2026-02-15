@@ -264,3 +264,5 @@ export const TeamLeaderDashboard = () => {
     </motion.div>
   )
 }
+
+export default TeamLeaderDashboard

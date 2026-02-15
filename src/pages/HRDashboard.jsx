@@ -3,8 +3,8 @@ import { motion } from 'framer-motion'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { TrendingUp, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
-import apiService from '../services/api'
-import socket from '../services/socket'
+import apiService from '@/services/api'
+import socket from '@/services/socket'
 
 
 export const HRDashboard = () => {

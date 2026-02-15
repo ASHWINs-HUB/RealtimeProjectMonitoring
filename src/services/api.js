@@ -1,6 +1,6 @@
 // API service for frontend-backend communication
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 class ApiService {
   constructor() {
@@ -27,13 +27,17 @@ class ApiService {
 
     try {
       const response = await fetch(url, config)
+      console.log('API Response status:', response.status, 'for URL:', url);
       
       if (!response.ok) {
         const error = await response.json()
+        console.error('API Error response:', error);
         throw new Error(error.message || 'Request failed')
       }
 
-      return await response.json()
+      const data = await response.json()
+      console.log('API Response data:', data);
+      return data
     } catch (error) {
       console.error('API Error:', error)
       throw error
@@ -79,7 +83,7 @@ class ApiService {
 
   // Project endpoints
   async getProjects() {
-    return this.request('/projects')
+    return this.request('/projects/public')
   }
 
   async getProject(id) {
@@ -87,7 +91,7 @@ class ApiService {
   }
 
   async createProject(projectData) {
-    return this.request('/projects', {
+    return this.request('/projects/create-temp', {
       method: 'POST',
       body: JSON.stringify(projectData),
     })
@@ -142,6 +146,29 @@ class ApiService {
     })
   }
 
+  async getProjectOffers(projectId) {
+    return this.request(`/projects/${projectId}/offers`)
+  }
+
+  async acceptOffer(offerId) {
+    return this.request(`/projects/offers/${offerId}/accept`, {
+      method: 'POST',
+    })
+  }
+
+  async rejectOffer(offerId) {
+    return this.request(`/projects/offers/${offerId}/reject`, {
+      method: 'POST',
+    })
+  }
+
+  async updateGitHubRepo(projectId, repoData) {
+    return this.request(`/projects/${projectId}/github`, {
+      method: 'PUT',
+      body: JSON.stringify(repoData),
+    })
+  }
+
   // GitHub integration endpoints
   async getGitHubRepos() {
     return this.request('/github/repos')
@@ -158,6 +185,12 @@ class ApiService {
     return this.request(`/projects/${projectId}/pull-requests`)
   }
 
+  async syncGitHubRepo(repoId) {
+    return this.request(`/github/repos/${repoId}/sync`, {
+      method: 'POST',
+    })
+  }
+
   // Jira integration endpoints
   async getJiraIssues(projectId) {
     return this.request(`/projects/${projectId}/jira-issues`)
@@ -167,6 +200,20 @@ class ApiService {
     return this.request(`/projects/${projectId}/jira-issues`, {
       method: 'POST',
       body: JSON.stringify(issueData),
+    })
+  }
+
+  async getJiraProjects() {
+    return this.request('/projects/jira')
+  }
+
+  async getJiraStats() {
+    return this.request('/jira/stats')
+  }
+
+  async syncJiraProject(projectKey) {
+    return this.request(`/jira/projects/${projectKey}/sync`, {
+      method: 'POST',
     })
   }
 

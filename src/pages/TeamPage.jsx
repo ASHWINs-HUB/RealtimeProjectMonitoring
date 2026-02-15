@@ -257,3 +257,5 @@ export const TeamPage = () => {
     </motion.div>
   )
 }
+
+export default TeamPage
