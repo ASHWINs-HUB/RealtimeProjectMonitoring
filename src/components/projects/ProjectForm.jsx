@@ -9,15 +9,30 @@ export const ProjectForm = ({ showModal, onClose, onProjectCreated, project }) =
     jira_project_name: project?.name || '',
     description: project?.description || '',
     repo_name: project?.repo_name || '',
-    deadline: project?.deadline ? new Date(project.deadline).toISOString().split('T')[0] : ''
+    create_github_repo: false,
+    deadline: project?.deadline ? new Date(project.deadline).toISOString().split('T')[0] : '',
+    manager_ids: []
   })
+  const [managers, setManagers] = useState([])
   const [formError, setFormError] = useState('')
   const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    const fetchManagers = async () => {
+      try {
+        const data = await apiService.getUsers('manager')
+        setManagers(data.users || [])
+      } catch (err) {
+        console.error('Failed to fetch managers:', err)
+      }
+    }
+    if (showModal) fetchManagers()
+  }, [showModal])
 
   const handleFormChange = (e) => {
     const { name, value, type, checked } = e.target
     const newForm = { ...form, [name]: type === 'checkbox' ? checked : value }
-    
+
     // Auto-generate project key when project name changes
     if (name === 'jira_project_name') {
       const generatedKey = generateProjectKey(value)
@@ -25,7 +40,7 @@ export const ProjectForm = ({ showModal, onClose, onProjectCreated, project }) =
         newForm.jira_project_key = generatedKey
       }
     }
-    
+
     setForm(newForm)
   }
 
@@ -48,11 +63,12 @@ export const ProjectForm = ({ showModal, onClose, onProjectCreated, project }) =
       }
 
       const payload = {
-        jira_project_key: form.jira_project_key.trim(),
-        jira_project_name: form.jira_project_name.trim(),
+        name: form.jira_project_name.trim(),
+        project_key: form.jira_project_key.trim(),
         description: form.description.trim() || undefined,
-        repo_name: form.repo_name.trim() || undefined,
-        deadline: form.deadline || undefined
+        deadline: form.deadline || undefined,
+        create_github_repo: form.create_github_repo,
+        manager_ids: form.manager_ids
       }
 
       console.log('Creating project with payload:', payload)
@@ -117,8 +133,8 @@ export const ProjectForm = ({ showModal, onClose, onProjectCreated, project }) =
               required
             />
             <div className="text-xs text-gray-400 mt-1">
-              {form.jira_project_key && form.jira_project_name && 
-               form.jira_project_key === generateProjectKey(form.jira_project_name)
+              {form.jira_project_key && form.jira_project_name &&
+                form.jira_project_key === generateProjectKey(form.jira_project_name)
                 ? '✓ Auto-generated from project name'
                 : 'Manually entered or modified'
               }
@@ -158,6 +174,40 @@ export const ProjectForm = ({ showModal, onClose, onProjectCreated, project }) =
                 className="w-full border border-gray-300 rounded-lg px-3 py-2"
               />
             </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium mb-1">Assign Manager(s)</label>
+              <select
+                multiple
+                name="manager_ids"
+                value={form.manager_ids}
+                onChange={e => {
+                  const selectedIds = Array.from(e.target.selectedOptions, option => parseInt(option.value));
+                  setForm(prev => ({ ...prev, manager_ids: selectedIds }));
+                }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 min-h-[100px]"
+              >
+                {managers.map(m => (
+                  <option key={m.id} value={m.id}>{m.name} ({m.department || 'N/A'})</option>
+                ))}
+              </select>
+              <div className="text-[10px] text-gray-400 mt-1">
+                Hold Ctrl (Windows) or Command (Mac) to select multiple managers
+              </div>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="create_github_repo"
+                  checked={form.create_github_repo}
+                  onChange={e => setForm({ ...form, create_github_repo: e.target.checked })}
+                  className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                />
+                <span className="text-sm font-medium text-gray-700">Create GitHub Repository</span>
+              </label>
+            </div>
+
             <div className="flex items-end sm:col-span-2">
               <Button
                 type="submit"

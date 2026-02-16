@@ -1,218 +1,202 @@
-import React, { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
-import { TrendingUp, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
-import apiService from '@/services/api'
-import socket from '@/services/socket'
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuthStore } from '@/store/authStore';
+import { useToast } from '@/components/ui/Toast';
+import api from '@/services/api';
+import { motion } from 'framer-motion';
+import {
+  FolderKanban, Users, TrendingUp, AlertTriangle, Plus,
+  ArrowUpRight, BarChart3, Activity, CheckCircle, Clock,
+  Zap, Target, X, Loader2
+} from 'lucide-react';
 
+// Stat card component
+const StatCard = ({ icon: Icon, label, value, trend, color, delay }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay }}
+    className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
+  >
+    <div className="flex items-start justify-between">
+      <div>
+        <p className="text-sm text-gray-500 font-medium">{label}</p>
+        <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+        {trend && (
+          <p className={`text-xs font-medium mt-1 flex items-center gap-1 ${trend > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+            <ArrowUpRight size={12} className={trend < 0 ? 'rotate-180' : ''} />
+            {Math.abs(trend)}% from last month
+          </p>
+        )}
+      </div>
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${color}`}>
+        <Icon size={20} className="text-white" />
+      </div>
+    </div>
+  </motion.div>
+);
 
 export const HRDashboard = () => {
-  const [stats, setStats] = useState({
-    total: 0,
-    riskScore: 0,
-    onTrack: 0,
-    delayed: 0,
-  });
-  const [deliveryForecastData, setDeliveryForecastData] = useState([]);
-  const [highRiskProjects, setHighRiskProjects] = useState([]);
+  const { user } = useAuthStore();
+  const toast = useToast();
+  const [projects, setProjects] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch initial data
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const analytics = await apiService.getTeamAnalytics();
-        setStats({
-          total: analytics.totalProjects,
-          riskScore: analytics.riskScore || 0,
-          onTrack: analytics.onTrackProjects || 0,
-          delayed: analytics.delayedProjects || 0,
-        });
-        setDeliveryForecastData(analytics.deliveryForecast || []);
-        setHighRiskProjects(analytics.highRiskProjects || []);
-      } catch (e) {
-        // fallback or error handling
-      }
+  const fetchData = useCallback(async () => {
+    try {
+      const [projData, analyticsData] = await Promise.all([
+        api.getProjects(),
+        api.getDashboardAnalytics().catch(() => null)
+      ]);
+      setProjects(projData.projects || []);
+      setAnalytics(analyticsData?.analytics || null);
+    } catch (error) {
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
     }
-    fetchData();
-    socket.connect();
-    return () => { socket.disconnect(); };
   }, []);
 
-  // Listen for real-time updates
-  useEffect(() => {
-    function handleRealtimeUpdate(data) {
-      if (data.stats) setStats(data.stats);
-      if (data.deliveryForecast) setDeliveryForecastData(data.deliveryForecast);
-      if (data.highRiskProjects) setHighRiskProjects(data.highRiskProjects);
-    }
-    socket.on('hr-dashboard-update', handleRealtimeUpdate);
-    return () => { socket.off('hr-dashboard-update', handleRealtimeUpdate); };
-  }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
+  const stats = {
+    total: projects.length,
+    active: projects.filter(p => ['active', 'in_progress', 'on_track', 'at_risk', 'delayed'].includes(p.status)).length,
+    completed: projects.filter(p => p.status === 'completed').length,
+    atRisk: projects.filter(p => p.status === 'at_risk' || (analytics?.project_health?.find(h => h.name === p.name)?.risk_score > 60)).length || 0
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+      </div>
+    );
   }
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.5
-      }
-    }
-  }
+
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-6"
-    >
-      <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">HR Dashboard</h1>
-        <p className="text-gray-600">Project health overview and risk assessment</p>
-      </div>
-      {/* Stats Grid - Responsive */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Total Projects</p>
-                  <p className="text-xl sm:text-2xl font-semibold text-gray-900 mt-1">{stats.total}</p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="text-indigo-600" size={20} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Risk Score</p>
-                  <p className="text-xl sm:text-2xl font-semibold text-red-600 mt-1">{stats.riskScore}</p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                  <AlertTriangle className="text-red-600" size={20} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">On Track</p>
-                  <p className="text-xl sm:text-2xl font-semibold text-green-600 mt-1">{stats.onTrack}</p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="text-green-600" size={20} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">Delayed</p>
-                  <p className="text-xl sm:text-2xl font-semibold text-yellow-600 mt-1">{stats.delayed}</p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <Clock className="text-yellow-600" size={20} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+    <div className="space-y-6">
+      {/* Welcome header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Welcome back, {user?.name?.split(' ')[0]} 👋
+          </h1>
+          <p className="text-gray-500 mt-1">Here's what's happening across your projects</p>
+        </div>
       </div>
 
-      {/* Charts and Tables - Responsive */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Delivery Forecast</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-64 sm:h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={deliveryForecastData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                    <XAxis dataKey="month" stroke="#6B7280" />
-                    <YAxis stroke="#6B7280" />
-                    <Tooltip />
-                    <Line 
-                      type="monotone" 
-                      dataKey="onTime" 
-                      stroke="#4F46E5" 
-                      strokeWidth={2}
-                      name="On Time %"
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="delayed" 
-                      stroke="#DC2626" 
-                      strokeWidth={2}
-                      name="Delayed %"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+      {/* Stats grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard icon={FolderKanban} label="Total Projects" value={stats.total} color="bg-indigo-500" delay={0} />
+        <StatCard icon={Activity} label="Active" value={stats.active} color="bg-emerald-500" delay={0.05} />
+        <StatCard icon={CheckCircle} label="Completed" value={stats.completed} color="bg-blue-500" delay={0.1} />
+        <StatCard icon={AlertTriangle} label="At Risk" value={stats.atRisk} color="bg-red-500" delay={0.15} />
+      </div>
 
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">High Risk Projects</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3 sm:space-y-4 max-h-64 sm:max-h-80 overflow-y-auto">
-                {highRiskProjects.map((project, index) => (
-                  <div key={index} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-gray-50 rounded-lg space-y-2 sm:space-y-0">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate">{project.name}</p>
-                      <p className="text-sm text-gray-600">Due: {project.deadline}</p>
-                    </div>
-                    <div className="flex items-center space-x-2 sm:space-x-3">
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        project.status === 'Critical' ? 'bg-red-100 text-red-600' :
-                        project.status === 'High' ? 'bg-orange-100 text-orange-600' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {project.status}
-                      </span>
-                      <div className="text-right">
-                        <p className="text-lg font-semibold text-gray-900">{project.risk}%</p>
-                        <p className="text-xs text-gray-600">Risk</p>
+      {/* Projects table */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">Recent Projects</h3>
+          <Link to="/projects" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+            View all →
+          </Link>
+        </div>
+        {projects.length === 0 ? (
+          <div className="p-12 text-center">
+            <FolderKanban size={40} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-gray-500 font-medium">No projects yet</p>
+            <p className="text-gray-400 text-sm mt-1">Create your first project to get started</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Project</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">Status</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Progress</th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Deadline</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {projects.slice(0, 8).map((project) => (
+                  <tr key={project.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-5 py-4">
+                      <div>
+                        <p className="font-medium text-gray-900">{project.name}</p>
+                        <p className="text-xs text-gray-500">{project.project_key}</p>
                       </div>
-                    </div>
-                  </div>
+                    </td>
+                    <td className="px-5 py-4 hidden sm:table-cell">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
+                          ${['active', 'in_progress', 'on_track'].includes(project.status) ? 'bg-emerald-50 text-emerald-700' :
+                          project.status === 'completed' ? 'bg-blue-50 text-blue-700' :
+                            ['at_risk', 'delayed'].includes(project.status) ? 'bg-red-50 text-red-700' :
+                              project.status === 'pending' ? 'bg-amber-50 text-amber-700' :
+                                'bg-gray-50 text-gray-700'
+                        }`}>
+                        {project.status?.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 hidden md:table-cell">
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-2 rounded-full bg-gray-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all"
+                            style={{ width: `${project.progress || 0}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500 font-medium">{project.progress || 0}%</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 hidden lg:table-cell text-sm text-gray-500">
+                      {project.deadline ? new Date(project.deadline).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <Link
+                        to={`/projects/${project.id}`}
+                        className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                      >
+                        View
+                      </Link>
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-    </motion.div>
-  )
-}
+
+      {/* Risk Overview */}
+      {analytics?.risk_distribution?.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <AlertTriangle size={18} className="text-amber-500" />
+            Risk Overview
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {['low', 'medium', 'high', 'critical'].map(level => {
+              const data = analytics.risk_distribution.find(r => r.risk_level === level);
+              const colors = {
+                low: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                medium: 'bg-amber-50 text-amber-700 border-amber-200',
+                high: 'bg-orange-50 text-orange-700 border-orange-200',
+                critical: 'bg-red-50 text-red-700 border-red-200'
+              };
+              return (
+                <div key={level} className={`p-4 rounded-xl border ${colors[level]}`}>
+                  <p className="text-sm font-medium capitalize">{level}</p>
+                  <p className="text-2xl font-bold mt-1">{data?.count || 0}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

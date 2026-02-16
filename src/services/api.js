@@ -1,239 +1,231 @@
-// API service for frontend-backend communication
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 class ApiService {
   constructor() {
-    this.baseURL = API_BASE_URL
-    this.token = localStorage.getItem('token')
+    this.baseURL = API_BASE_URL;
   }
 
-  // Helper method to make API requests
+  getToken() {
+    return localStorage.getItem('pp_token');
+  }
+
+  setToken(token) {
+    localStorage.setItem('pp_token', token);
+  }
+
+  removeToken() {
+    localStorage.removeItem('pp_token');
+  }
+
   async request(endpoint, options = {}) {
-    const url = `${this.baseURL}${endpoint}`
-    
+    const url = `${this.baseURL}${endpoint}`;
+    const token = this.getToken();
+
     const config = {
       headers: {
         'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
         ...options.headers,
       },
       ...options,
-    }
-
-    // Add authorization header if token exists
-    if (this.token) {
-      config.headers.Authorization = `Bearer ${this.token}`
-    }
+    };
 
     try {
-      const response = await fetch(url, config)
-      console.log('API Response status:', response.status, 'for URL:', url);
-      
-      if (!response.ok) {
-        const error = await response.json()
-        console.error('API Error response:', error);
-        throw new Error(error.message || 'Request failed')
+      const response = await fetch(url, config);
+
+      if (response.status === 401) {
+        this.removeToken();
+        window.location.href = '/login';
+        throw new Error('Session expired');
       }
 
-      const data = await response.json()
-      console.log('API Response data:', data);
-      return data
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || `Request failed with status ${response.status}`);
+      }
+
+      return data;
     } catch (error) {
-      console.error('API Error:', error)
-      throw error
+      if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
+        throw new Error('Unable to connect to server. Please check your connection.');
+      }
+      throw error;
     }
   }
 
-  // Authentication endpoints
-  async login(credentials) {
-    const response = await this.request('/auth/login', {
+  // ============ AUTH ============
+  async login(email, password) {
+    const data = await this.request('/auth/login', {
       method: 'POST',
-      body: JSON.stringify(credentials),
-    })
-    
-    if (response.token) {
-      this.token = response.token
-      localStorage.setItem('token', response.token)
-    }
-    
-    return response
+      body: JSON.stringify({ email, password }),
+    });
+    if (data.token) this.setToken(data.token);
+    return data;
   }
 
   async register(userData) {
-    return this.request('/auth/register', {
+    const data = await this.request('/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
-    })
+    });
+    if (data.token) this.setToken(data.token);
+    return data;
   }
 
-  async logout() {
-    try {
-      await this.request('/auth/logout', {
-        method: 'POST',
-      })
-    } finally {
-      this.token = null
-      localStorage.removeItem('token')
-    }
+  async getMe() {
+    return this.request('/auth/me');
   }
 
-  async getCurrentUser() {
-    return this.request('/auth/me')
+  async getUsers(role) {
+    const query = role ? `?role=${role}` : '';
+    return this.request(`/auth/users${query}`);
   }
 
-  // Project endpoints
+  logout() {
+    this.removeToken();
+  }
+
+  // ============ PROJECTS ============
   async getProjects() {
-    return this.request('/projects/public')
+    return this.request('/projects');
   }
 
   async getProject(id) {
-    return this.request(`/projects/${id}`)
+    return this.request(`/projects/${id}`);
   }
 
-  async createProject(projectData) {
-    return this.request('/projects/create-temp', {
+  async createProject(data) {
+    return this.request('/projects', {
       method: 'POST',
-      body: JSON.stringify(projectData),
-    })
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateProject(id, projectData) {
+  async updateProject(id, data) {
     return this.request(`/projects/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(projectData),
-    })
+      body: JSON.stringify(data),
+    });
   }
 
-  async deleteProject(id) {
-    return this.request(`/projects/${id}`, {
-      method: 'DELETE',
-    })
+  async acceptProject(id) {
+    return this.request(`/projects/${id}/accept`, { method: 'POST' });
   }
 
-  // Task endpoints
-  async getTasks(projectId) {
-    return this.request(`/projects/${projectId}/tasks`)
+  async declineProject(id) {
+    return this.request(`/projects/${id}/decline`, { method: 'POST' });
   }
 
-  async createTask(projectId, taskData) {
+  async getProjectStats() {
+    return this.request('/projects/stats');
+  }
+
+  // ============ SCOPES ============
+  async createScope(projectId, data) {
+    return this.request(`/projects/${projectId}/scopes`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getScopes(projectId) {
+    return this.request(`/projects/${projectId}/scopes`);
+  }
+
+  // ============ TASKS ============
+  async createTask(projectId, data) {
     return this.request(`/projects/${projectId}/tasks`, {
       method: 'POST',
-      body: JSON.stringify(taskData),
-    })
+      body: JSON.stringify(data),
+    });
   }
 
-  async updateTask(projectId, taskId, taskData) {
-    return this.request(`/projects/${projectId}/tasks/${taskId}`, {
+  async getProjectTasks(projectId) {
+    return this.request(`/projects/${projectId}/tasks`);
+  }
+
+  async getAssignedTasks() {
+    return this.request('/tasks/assigned');
+  }
+
+  async updateTaskStatus(taskId, data) {
+    return this.request(`/tasks/${taskId}/status`, {
       method: 'PUT',
-      body: JSON.stringify(taskData),
-    })
+      body: JSON.stringify(data),
+    });
   }
 
-  // User endpoints
-  async getUsers(role = null) {
-    const query = role ? `?role=${role}` : ''
-    return this.request(`/users${query}`)
+  // ============ TEAMS ============
+  async getTeams() {
+    return this.request('/teams');
   }
 
-  async getUser(id) {
-    return this.request(`/users/${id}`)
-  }
-
-  async updateUser(id, userData) {
-    return this.request(`/users/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(userData),
-    })
-  }
-
-  async getProjectOffers(projectId) {
-    return this.request(`/projects/${projectId}/offers`)
-  }
-
-  async acceptOffer(offerId) {
-    return this.request(`/projects/offers/${offerId}/accept`, {
+  async createTeam(data) {
+    return this.request('/teams', {
       method: 'POST',
-    })
+      body: JSON.stringify(data),
+    });
   }
 
-  async rejectOffer(offerId) {
-    return this.request(`/projects/offers/${offerId}/reject`, {
-      method: 'POST',
-    })
+  // ============ NOTIFICATIONS ============
+  async getNotifications() {
+    return this.request('/notifications');
   }
 
-  async updateGitHubRepo(projectId, repoData) {
-    return this.request(`/projects/${projectId}/github`, {
-      method: 'PUT',
-      body: JSON.stringify(repoData),
-    })
+  async markNotificationRead(id) {
+    return this.request(`/notifications/${id}/read`, { method: 'PUT' });
   }
 
-  // GitHub integration endpoints
-  async getGitHubRepos() {
-    return this.request('/github/repos')
+  async markAllNotificationsRead() {
+    return this.request('/notifications/read-all', { method: 'PUT' });
   }
 
-  async createGitHubRepo(repoData) {
-    return this.request('/github/repos', {
-      method: 'POST',
-      body: JSON.stringify(repoData),
-    })
+  // ============ ANALYTICS ============
+  async getDashboardAnalytics() {
+    return this.request('/analytics/dashboard');
   }
 
-  async getPullRequests(projectId) {
-    return this.request(`/projects/${projectId}/pull-requests`)
+  async getProjectRisk(projectId) {
+    return this.request(`/analytics/project/${projectId}/risk`);
   }
 
-  async syncGitHubRepo(repoId) {
-    return this.request(`/github/repos/${repoId}/sync`, {
-      method: 'POST',
-    })
+  async getSprintDelay(projectId) {
+    return this.request(`/analytics/project/${projectId}/sprint-delay`);
   }
 
-  // Jira integration endpoints
-  async getJiraIssues(projectId) {
-    return this.request(`/projects/${projectId}/jira-issues`)
+  async getCompletionForecast(projectId) {
+    return this.request(`/analytics/project/${projectId}/forecast`);
   }
 
-  async createJiraIssue(projectId, issueData) {
-    return this.request(`/projects/${projectId}/jira-issues`, {
-      method: 'POST',
-      body: JSON.stringify(issueData),
-    })
+  async getDeveloperPerformance(userId) {
+    return this.request(`/analytics/developer/${userId}/performance`);
   }
 
-  async getJiraProjects() {
-    return this.request('/projects/jira')
+  async getBurnoutScore(userId) {
+    return this.request(`/analytics/developer/${userId}/burnout`);
   }
 
-  async getJiraStats() {
-    return this.request('/jira/stats')
+  async getMyPerformance() {
+    return this.request('/analytics/my-performance');
   }
 
-  async syncJiraProject(projectKey) {
-    return this.request(`/jira/projects/${projectKey}/sync`, {
-      method: 'POST',
-    })
+  async getJiraAnalytics(projectId) {
+    return this.request(`/analytics/project/${projectId}/jira`);
   }
 
-  // Analytics endpoints
-  async getProjectMetrics(projectId) {
-    return this.request(`/projects/${projectId}/metrics`)
+  async getGithubAnalytics(projectId) {
+    return this.request(`/analytics/project/${projectId}/github`);
   }
 
-  async getTeamAnalytics() {
-    return this.request('/analytics/team')
+  async getInsights() {
+    return this.request('/analytics/insights');
   }
 
-  async getRiskPrediction(projectId) {
-    return this.request(`/ml/predict-risk/${projectId}`)
-  }
-
-  async getDeliveryPrediction(projectId) {
-    return this.request(`/ml/predict-delivery/${projectId}`)
+  async triggerBatchCompute() {
+    return this.request('/analytics/compute-all', { method: 'POST' });
   }
 }
 
-export const apiService = new ApiService()
-export default apiService
+export const api = new ApiService();
+export default api;

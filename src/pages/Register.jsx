@@ -1,186 +1,127 @@
-import React, { useState } from 'react'
-import { motion } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/Button'
-import { useAuthStore } from '@/store/authStore'
-import { UserPlus, Mail, Lock, Building, User } from 'lucide-react'
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuthStore } from '@/store/authStore';
+import { motion } from 'framer-motion';
+import { Zap, ArrowRight, Loader2 } from 'lucide-react';
 
-export const RegisterPage = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    role: 'developer'
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const navigate = useNavigate()
-  const { register } = useAuthStore()
+export const Register = () => {
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'developer', department: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { register } = useAuthStore();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
-      setLoading(false)
-      return
-    }
-
+    e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
-      await register(formData)
-      navigate('/dashboard')
+      await register(form);
+      navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'Registration failed')
+      setError(err.message || 'Registration failed.');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    })
-  }
+  const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex items-center justify-center p-6">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-md"
       >
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-white font-bold text-2xl">P</span>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900">Create Account</h2>
-            <p className="text-gray-600 mt-2">Join ProjectPulse to manage your projects</p>
+        <div className="flex items-center gap-3 mb-8 justify-center">
+          <div className="w-10 h-10 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-xl flex items-center justify-center">
+            <Zap size={20} className="text-white" />
+          </div>
+          <span className="text-xl font-bold text-white">ProjectPulse AI</span>
+        </div>
+
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-white">Create Account</h2>
+            <p className="text-gray-400 mt-2">Join your team on ProjectPulse</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800 text-sm">
-                {error}
-              </div>
-            )}
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+              <p className="text-red-300 text-sm">{error}</p>
+            </div>
+          )}
 
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <User size={16} className="inline mr-2" />
-                Full Name
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">Full Name</label>
               <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                type="text" id="register-name" value={form.name}
+                onChange={e => updateField('name', e.target.value)} required
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 placeholder="John Doe"
-                required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Mail size={16} className="inline mr-2" />
-                Email Address
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">Email</label>
               <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="john@example.com"
-                required
+                type="email" id="register-email" value={form.email}
+                onChange={e => updateField('email', e.target.value)} required
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                placeholder="you@company.com"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Building size={16} className="inline mr-2" />
-                Role
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">Password</label>
+              <input
+                type="password" id="register-password" value={form.password}
+                onChange={e => updateField('password', e.target.value)} required minLength={6}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                placeholder="••••••••"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">Role</label>
               <select
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                required
+                id="register-role" value={form.role}
+                onChange={e => updateField('role', e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
               >
-                <option value="hr">HR Manager</option>
-                <option value="manager">Project Manager</option>
-                <option value="team_leader">Team Leader</option>
-                <option value="developer">Developer</option>
+                <option value="developer" className="bg-gray-800">Developer</option>
+                <option value="team_leader" className="bg-gray-800">Team Leader</option>
+                <option value="manager" className="bg-gray-800">Manager</option>
+                <option value="hr" className="bg-gray-800">HR</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Lock size={16} className="inline mr-2" />
-                Password
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-1.5">Department</label>
               <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="•••••••••"
-                required
+                type="text" id="register-department" value={form.department}
+                onChange={e => updateField('department', e.target.value)}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                placeholder="Engineering"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <Lock size={16} className="inline mr-2" />
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="•••••••••"
-                required
-              />
-            </div>
-
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+            <button
+              type="submit" id="register-submit" disabled={loading}
+              className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {loading ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Creating account...
-                </div>
-              ) : (
-                <div className="flex items-center">
-                  <UserPlus size={20} className="mr-2" />
-                  Create Account
-                </div>
-              )}
-            </Button>
+              {loading ? <Loader2 size={20} className="animate-spin" /> : <><span>Create Account</span><ArrowRight size={18} /></>}
+            </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Already have an account?{' '}
-              <a href="/login" className="text-indigo-600 hover:text-indigo-800 font-medium">
-                Sign in
-              </a>
-            </p>
-          </div>
+          <p className="mt-6 text-center text-gray-400 text-sm">
+            Already have an account?{' '}
+            <Link to="/login" className="text-indigo-400 hover:text-indigo-300 font-medium">Sign in</Link>
+          </p>
         </div>
       </motion.div>
     </div>
-  )
-}
+  );
+};

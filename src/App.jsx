@@ -1,197 +1,102 @@
-import React, { useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { MainLayout } from '@/layouts/MainLayout'
-import { Login } from '@/pages/Login'
-import { Unauthorized } from '@/pages/Unauthorized'
-import { HRDashboard } from '@/pages/HRDashboard'
-import { ManagerDashboard } from '@/pages/ManagerDashboard'
-import { TeamLeaderDashboard } from '@/pages/TeamLeaderDashboard'
-import { DeveloperDashboard } from '@/pages/DeveloperDashboard'
-import { ProjectsPage } from '@/pages/ProjectsPage'
-import { AnalyticsPage } from '@/pages/AnalyticsPage'
-import { TasksPage } from '@/pages/TasksPage'
-import { TeamPage } from '@/pages/TeamPage'
-import { RepositoryPage } from '@/pages/RepositoryPage'
-import { SettingsPage } from '@/pages/SettingsPage'
-import { useAuthStore } from '@/store/authStore'
+import React, { useEffect } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useAuthStore } from '@/store/authStore';
+import { MainLayout } from '@/layouts/MainLayout';
+import { Login } from '@/pages/Login';
+import { Register } from '@/pages/Register';
+import { HRDashboard } from '@/pages/HRDashboard';
+import { ManagerDashboard } from '@/pages/ManagerDashboard';
+import { TeamLeaderDashboard } from '@/pages/TeamLeaderDashboard';
+import { DeveloperDashboard } from '@/pages/DeveloperDashboard';
+import { ProjectsPage } from '@/pages/ProjectsPage';
+import { ProjectDetailPage } from '@/pages/ProjectDetailPage';
+import { AnalyticsPage } from '@/pages/AnalyticsPage';
+import { InsightsPage } from '@/pages/InsightsPage';
+import { MyScorePage } from '@/pages/MyScorePage';
+import { TeamManagementPage } from '@/pages/TeamManagementPage';
+import { motion, AnimatePresence } from 'framer-motion';
 
+// Page transition wrapper
+const PageTransition = ({ children }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -10 }}
+    transition={{ duration: 0.3, ease: 'easeOut' }}
+  >
+    {children}
+  </motion.div>
+);
 
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, isLoading, user, login, setLoading } = useAuthStore();
+// Unified Protected Route
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  const { user, isAuthenticated, isLoading: loading, checkAuth } = useAuthStore();
+  const location = useLocation();
+
   useEffect(() => {
-    // On mount, check for token and fetch user if needed
-    const token = localStorage.getItem('token');
-    if (token && !user) {
-      setLoading(true);
-      fetch('/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-        .then(res => res.ok ? res.json() : Promise.reject())
-        .then(data => {
-          if (data.user) login(data.user);
-        })
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    }
-  }, []);
-  if (isLoading) {
-    return <div style={{textAlign:'center',marginTop:'20vh'}}>Loading...</div>;
+    if (!isAuthenticated) checkAuth();
+  }, [isAuthenticated, checkAuth]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+      </div>
+    );
   }
+
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
+
+  if (allowedRoles && !allowedRoles.includes(user?.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
   return children;
-}
+};
 
-const RoleBasedRoute = ({ children, requiredRole }) => {
-  const { user } = useAuthStore()
-  
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-  
-  if (requiredRole && user.role !== requiredRole) {
-    return <Navigate to="/unauthorized" replace />
-  }
-  
-  return children
-}
-
+// Simple Dashboard Router
 const DashboardRouter = () => {
-  const { user } = useAuthStore()
-  
-  const getDashboardComponent = () => {
-    switch (user?.role) {
-      case 'hr':
-        return <HRDashboard />
-      case 'manager':
-        return <ManagerDashboard />
-      case 'team_leader':
-        return <TeamLeaderDashboard />
-      case 'developer':
-        return <DeveloperDashboard />
-      default:
-        return <Navigate to="/login" replace />
-    }
+  const { user } = useAuthStore();
+
+  switch (user?.role) {
+    case 'hr': return <HRDashboard />;
+    case 'manager': return <ManagerDashboard />;
+    case 'team_leader': return <TeamLeaderDashboard />;
+    case 'developer': return <DeveloperDashboard />;
+    default: return <Navigate to="/login" />;
   }
-  
-  return (
-    <MainLayout>
-      {getDashboardComponent()}
-    </MainLayout>
-  )
-}
+};
 
-function App() {
+const App = () => {
   return (
-    <Router>
+    <AnimatePresence mode="wait">
       <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/unauthorized" element={<Unauthorized />} />
-        <Route path="/" element={
-          <ProtectedRoute>
-            <DashboardRouter />
-          </ProtectedRoute>
-        } />
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <DashboardRouter />
-          </ProtectedRoute>
-        } />
-        
-        {/* Project Routes */}
-        <Route path="/projects" element={
-          <ProtectedRoute>
-            <MainLayout><ProjectsPage /></MainLayout>
-          </ProtectedRoute>
-        } />
-        
-        {/* Analytics Routes */}
-        <Route path="/analytics" element={
-          <RoleBasedRoute requiredRole="hr">
-            <MainLayout><AnalyticsPage /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        <Route path="/analytics" element={
-          <RoleBasedRoute requiredRole="manager">
-            <MainLayout><AnalyticsPage /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        
-        {/* Repository Routes */}
-        <Route path="/repository" element={
-          <RoleBasedRoute requiredRole="manager">
-            <MainLayout><RepositoryPage /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        <Route path="/repository" element={
-          <RoleBasedRoute requiredRole="team_leader">
-            <MainLayout><RepositoryPage /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        <Route path="/repository" element={
-          <RoleBasedRoute requiredRole="developer">
-            <MainLayout><RepositoryPage /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        
-        {/* Tasks Routes */}
-        <Route path="/tasks" element={
-          <RoleBasedRoute requiredRole="team_leader">
-            <MainLayout><TasksPage /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        <Route path="/tasks" element={
-          <RoleBasedRoute requiredRole="developer">
-            <MainLayout><TasksPage /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        
-        {/* Team Routes */}
-        <Route path="/team" element={
-          <RoleBasedRoute requiredRole="hr">
-            <MainLayout><TeamPage /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        <Route path="/team" element={
-          <RoleBasedRoute requiredRole="manager">
-            <MainLayout><TeamPage /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        
-        {/* Settings Routes */}
-        <Route path="/settings" element={
-          <ProtectedRoute>
-            <MainLayout><SettingsPage /></MainLayout>
-          </ProtectedRoute>
-        } />
-        
-        {/* Direct role routes */}
-        <Route path="/hr" element={
-          <RoleBasedRoute requiredRole="hr">
-            <MainLayout><HRDashboard /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        <Route path="/manager" element={
-          <RoleBasedRoute requiredRole="manager">
-            <MainLayout><ManagerDashboard /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        <Route path="/team-leader" element={
-          <RoleBasedRoute requiredRole="team_leader">
-            <MainLayout><TeamLeaderDashboard /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        <Route path="/developer" element={
-          <RoleBasedRoute requiredRole="developer">
-            <MainLayout><DeveloperDashboard /></MainLayout>
-          </RoleBasedRoute>
-        } />
-        
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
-  )
-}
+        <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+        <Route path="/register" element={<PageTransition><Register /></PageTransition>} />
 
-export default App
+        <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+          <Route path="/dashboard" element={<PageTransition><DashboardRouter /></PageTransition>} />
+
+          <Route path="/projects" element={<ProtectedRoute allowedRoles={['hr', 'manager', 'team_leader']}><PageTransition><ProjectsPage /></PageTransition></ProtectedRoute>} />
+          <Route path="/projects/:id" element={<PageTransition><ProjectDetailPage /></PageTransition>} />
+
+          <Route path="/analytics" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><PageTransition><AnalyticsPage /></PageTransition></ProtectedRoute>} />
+          <Route path="/insights" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><PageTransition><InsightsPage /></PageTransition></ProtectedRoute>} />
+
+          <Route path="/team" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><PageTransition><TeamManagementPage /></PageTransition></ProtectedRoute>} />
+
+          <Route path="/tasks" element={<ProtectedRoute allowedRoles={['developer', 'team_leader']}><PageTransition><DeveloperDashboard /></PageTransition></ProtectedRoute>} />
+          <Route path="/my-score" element={<ProtectedRoute allowedRoles={['developer']}><PageTransition><MyScorePage /></PageTransition></ProtectedRoute>} />
+
+          {/* Fallback to Dashboard */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      </Routes>
+    </AnimatePresence>
+  );
+};
+
+export default App;

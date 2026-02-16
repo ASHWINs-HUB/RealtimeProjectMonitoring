@@ -1,188 +1,95 @@
-import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { useAuthStore } from '@/store/authStore'
-import { ProtectedRoute } from './ProtectedRoute'
+import React, { useEffect } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useAuthStore } from '@/store/authStore';
+import { MainLayout } from '@/layouts/MainLayout';
+import { ProtectedRoute } from './ProtectedRoute';
 
-// Layout Components
-import { MainLayout } from '@/layouts/MainLayout'
-import { AuthLayout } from '@/layouts/AuthLayout'
+// Pages
+import { Login } from '@/pages/Login';
+import { Register } from '@/pages/Register';
+import { Unauthorized } from '@/pages/Unauthorized';
+import { HRDashboard } from '@/pages/HRDashboard';
+import { ManagerDashboard } from '@/pages/ManagerDashboard';
+import { TeamLeaderDashboard } from '@/pages/TeamLeaderDashboard';
+import { DeveloperDashboard } from '@/pages/DeveloperDashboard';
+import { ProjectsPage } from '@/pages/ProjectsPage';
+import { ProjectDetailPage } from '@/pages/ProjectDetailPage';
+import { AnalyticsPage } from '@/pages/AnalyticsPage';
+import { InsightsPage } from '@/pages/InsightsPage';
+import { MyScorePage } from '@/pages/MyScorePage';
+import { TeamManagementPage } from '@/pages/TeamManagementPage';
+import { SettingsPage } from '@/pages/SettingsPage';
+import { TeamPage } from '@/pages/TeamPage';
 
-// Auth Pages
-import { Login } from '@/pages/Login'
-import { RegisterPage } from '@/pages/Register'
-import { Unauthorized } from '@/pages/Unauthorized'
+// Simple dashboard router for the /dashboard path
+const DashboardRouter = () => {
+  const { user } = useAuthStore();
 
-// Simple dashboard components
-import { ProjectsPage } from '@/pages/ProjectsPage'
-import { TeamPage } from '@/pages/TeamPage'
-import { SettingsPage } from '@/pages/SettingsPage'
+  if (!user) return <Navigate to="/login" replace />;
+
+  switch (user.role) {
+    case 'hr': return <HRDashboard />;
+    case 'manager': return <ManagerDashboard />;
+    case 'team_leader': return <TeamLeaderDashboard />;
+    case 'developer': return <DeveloperDashboard />;
+    default: return <Unauthorized />;
+  }
+};
 
 export const AppRouter = () => {
-  const { user, isAuthenticated } = useAuthStore()
+  const { user, isAuthenticated, isLoading: loading, checkAuth } = useAuthStore();
+  const location = useLocation();
 
-  if (!isAuthenticated) {
+  useEffect(() => {
+    // Always verify authentication on mount to ensure session validity
+    checkAuth();
+  }, [checkAuth]);
+
+  if (loading) {
     return (
-      <AuthLayout>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/unauthorized" element={<Unauthorized />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </AuthLayout>
-    )
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+        <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4" />
+        <p className="text-gray-500 font-medium animate-pulse">Syncing ProjectPulse AI...</p>
+      </div>
+    );
   }
 
   return (
-    <MainLayout>
-      <Routes>
-        {/* Dashboard Routes - Simple Content */}
-        <Route 
-          path="/dashboard" 
-          element={
-            <ProtectedRoute allowedRoles={['hr', 'manager', 'team_leader', 'developer']}>
-              <div className="p-6">
-                <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-                <p className="text-gray-600 mt-2">Welcome to your dashboard!</p>
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Projects</h3>
-                    <p className="text-2xl font-bold text-blue-600">12</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Tasks</h3>
-                    <p className="text-2xl font-bold text-green-600">8</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Team</h3>
-                    <p className="text-2xl font-bold text-purple-600">5</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Analytics</h3>
-                    <p className="text-2xl font-bold text-orange-600">3</p>
-                  </div>
-                </div>
-              </div>
-            </ProtectedRoute>
-          } 
-        />
+    <Routes>
+      {/* Public Routes */}
+      <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} />
+      <Route path="/unauthorized" element={<Unauthorized />} />
 
-        {/* Manager Routes */}
-        <Route 
-          path="/manager/dashboard" 
-          element={
-            <ProtectedRoute allowedRoles={['manager']}>
-              <div className="p-6">
-                <h1 className="text-2xl font-bold text-gray-900">Manager Dashboard</h1>
-                <p className="text-gray-600 mt-2">Manage your team and projects</p>
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Active Projects</h3>
-                    <p className="text-2xl font-bold text-blue-600">8</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Team Members</h3>
-                    <p className="text-2xl font-bold text-green-600">15</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Performance</h3>
-                    <p className="text-2xl font-bold text-purple-600">92%</p>
-                  </div>
-                </div>
-              </div>
-            </ProtectedRoute>
-          } 
-        />
+      {/* Protected Routes inside MainLayout */}
+      <Route element={<ProtectedRoute allowedRoles={['hr', 'manager', 'team_leader', 'developer']}><MainLayout /></ProtectedRoute>}>
+        <Route path="/dashboard" element={<DashboardRouter />} />
 
-        {/* Team Leader Routes */}
-        <Route 
-          path="/team-leader/dashboard" 
-          element={
-            <ProtectedRoute allowedRoles={['team_leader']}>
-              <div className="p-6">
-                <h1 className="text-2xl font-bold text-gray-900">Team Leader Dashboard</h1>
-                <p className="text-gray-600 mt-2">Lead your team to success</p>
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Team Tasks</h3>
-                    <p className="text-2xl font-bold text-blue-600">24</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Completed</h3>
-                    <p className="text-2xl font-bold text-green-600">18</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Progress</h3>
-                    <p className="text-2xl font-bold text-orange-600">75%</p>
-                  </div>
-                </div>
-              </div>
-            </ProtectedRoute>
-          } 
-        />
+        {/* Project Routes */}
+        <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/projects/:id" element={<ProjectDetailPage />} />
 
-        {/* Developer Routes */}
-        <Route 
-          path="/developer/dashboard" 
-          element={
-            <ProtectedRoute allowedRoles={['developer']}>
-              <div className="p-6">
-                <h1 className="text-2xl font-bold text-gray-900">Developer Dashboard</h1>
-                <p className="text-gray-600 mt-2">Track your work and progress</p>
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">My Tasks</h3>
-                    <p className="text-2xl font-bold text-blue-600">12</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">Completed</h3>
-                    <p className="text-2xl font-bold text-green-600">8</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800">In Progress</h3>
-                    <p className="text-2xl font-bold text-orange-600">4</p>
-                  </div>
-                </div>
-              </div>
-            </ProtectedRoute>
-          } 
-        />
+        {/* Manager/HR Analytics & AI Insights */}
+        <Route path="/analytics" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><AnalyticsPage /></ProtectedRoute>} />
+        <Route path="/insights" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><InsightsPage /></ProtectedRoute>} />
 
-        {/* Common Routes */}
-        <Route 
-          path="/projects" 
-          element={
-            <ProtectedRoute allowedRoles={['hr', 'manager', 'team_leader']}>
-              <ProjectsPage />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/team" 
-          element={
-            <ProtectedRoute allowedRoles={['manager', 'team_leader']}>
-              <TeamPage />
-            </ProtectedRoute>
-          } 
-        />
+        {/* Team/User Management */}
+        <Route path="/team" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><TeamManagementPage /></ProtectedRoute>} />
+        <Route path="/team-members" element={<ProtectedRoute allowedRoles={['team_leader']}><TeamPage /></ProtectedRoute>} />
+        <Route path="/team-analytics" element={<ProtectedRoute allowedRoles={['team_leader']}><AnalyticsPage /></ProtectedRoute>} />
+
+        {/* Developer Specifics */}
+        <Route path="/tasks" element={<ProtectedRoute allowedRoles={['developer', 'team_leader']}><DeveloperDashboard /></ProtectedRoute>} />
+        <Route path="/task-management" element={<ProtectedRoute allowedRoles={['developer']}><DeveloperDashboard /></ProtectedRoute>} />
+        <Route path="/my-score" element={<ProtectedRoute allowedRoles={['developer']}><MyScorePage /></ProtectedRoute>} />
+
+        {/* Settings */}
         <Route path="/settings" element={<SettingsPage />} />
-        
-        {/* Default redirect based on role */}
-        <Route 
-          path="/" 
-          element={
-            <Navigate 
-              to={
-                user?.role === 'hr' ? '/dashboard' :
-                user?.role === 'manager' ? '/manager/dashboard' :
-                user?.role === 'team_leader' ? '/team-leader/dashboard' :
-                '/developer/dashboard'
-              } 
-              replace 
-            />
-          } 
-        />
-      </Routes>
-    </MainLayout>
-  )
-}
+      </Route>
+
+      {/* Fallback */}
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  );
+};

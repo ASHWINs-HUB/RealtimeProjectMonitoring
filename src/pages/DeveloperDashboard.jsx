@@ -1,307 +1,270 @@
-import React from 'react'
-import { motion } from 'framer-motion'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { CheckSquare, GitBranch, GitPullRequest, TrendingUp, Clock, AlertCircle } from 'lucide-react'
-
-const assignedTasks = [
-  { id: 'TASK-001', title: 'Implement user authentication', priority: 'high', status: 'in-progress', dueDate: '2024-02-15' },
-  { id: 'TASK-002', title: 'Fix navigation menu bug', priority: 'medium', status: 'todo', dueDate: '2024-02-18' },
-  { id: 'TASK-003', title: 'Add unit tests for API', priority: 'low', status: 'todo', dueDate: '2024-02-20' },
-  { id: 'TASK-004', title: 'Optimize database queries', priority: 'high', status: 'review', dueDate: '2024-02-12' },
-  { id: 'TASK-005', title: 'Update documentation', priority: 'low', status: 'done', dueDate: '2024-02-10' },
-]
-
-const branchStatus = [
-  { name: 'main', status: 'clean', commits: 142, lastUpdate: '2 hours ago' },
-  { name: 'feature/auth', status: 'ahead', commits: 8, lastUpdate: '1 day ago' },
-  { name: 'bugfix/navigation', status: 'behind', commits: 3, lastUpdate: '3 days ago' },
-  { name: 'hotfix/security', status: 'clean', commits: 2, lastUpdate: '5 hours ago' },
-]
-
-const prStatus = [
-  { id: '#234', title: 'Implement user authentication', status: 'pending', reviews: 2, time: '2 hours ago' },
-  { id: '#235', title: 'Fix navigation menu bug', status: 'approved', reviews: 3, time: '1 day ago' },
-  { id: '#236', title: 'Add unit tests for API', status: 'changes-requested', reviews: 1, time: '2 days ago' },
-]
-
-const performanceMetrics = [
-  { month: 'Jan', tasks: 18, completed: 16, efficiency: 89 },
-  { month: 'Feb', tasks: 22, completed: 20, efficiency: 91 },
-  { month: 'Mar', tasks: 19, completed: 17, efficiency: 89 },
-  { month: 'Apr', tasks: 25, completed: 23, efficiency: 92 },
-  { month: 'May', tasks: 21, completed: 19, efficiency: 90 },
-  { month: 'Jun', tasks: 20, completed: 18, efficiency: 90 },
-]
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuthStore } from '@/store/authStore';
+import { useToast } from '@/components/ui/Toast';
+import api from '@/services/api';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  CheckCircle2, Clock, AlertCircle, PlayCircle,
+  BarChart3, Award, Zap, GitBranch, ExternalLink, MessageSquare,
+  ChevronDown, Search, Filter, Loader2, Check, ListChecks, RefreshCw
+} from 'lucide-react';
 
 export const DeveloperDashboard = () => {
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  }
+  const { user } = useAuthStore();
+  const toast = useToast();
+  const [tasks, setTasks] = useState([]);
+  const [performance, setPerformance] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.5
-      }
+  const fetchData = useCallback(async () => {
+    try {
+      const [taskData, perfData] = await Promise.all([
+        api.getAssignedTasks(),
+        api.getDeveloperPerformance(user.id).catch(() => null)
+      ]);
+      setTasks(taskData.tasks || []);
+      setPerformance(perfData?.performance || null);
+    } catch (error) {
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
     }
-  }
+  }, [user.id, toast]);
 
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'high': return 'bg-danger text-white'
-      case 'medium': return 'bg-warning text-white'
-      case 'low': return 'bg-gray-200 text-gray-700'
-      default: return 'bg-gray-200 text-gray-700'
-    }
-  }
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'done': return 'bg-green-100 text-success'
-      case 'in-progress': return 'bg-blue-100 text-blue-600'
-      case 'review': return 'bg-yellow-100 text-warning'
-      case 'todo': return 'bg-gray-100 text-secondary-text'
-      default: return 'bg-gray-100 text-secondary-text'
+  const handleUpdateStatus = async (taskId, newStatus) => {
+    setUpdatingId(taskId);
+    try {
+      await api.updateTaskStatus(taskId, { status: newStatus });
+      toast.success(`Task marked as ${newStatus.replace('_', ' ')}`);
+      fetchData();
+    } catch (error) {
+      toast.error(error.message || 'Status update failed');
+    } finally {
+      setUpdatingId(null);
     }
-  }
+  };
 
-  const getBranchStatusColor = (status) => {
-    switch (status) {
-      case 'clean': return 'text-success'
-      case 'ahead': return 'text-blue-600'
-      case 'behind': return 'text-warning'
-      default: return 'text-secondary-text'
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await api.triggerBatchCompute(); // This now includes syncAll() in our updated backend
+      toast.success('Synchronized with Jira & GitHub');
+      fetchData();
+    } catch (error) {
+      toast.error('Sync failed');
+    } finally {
+      setSyncing(false);
     }
-  }
+  };
 
-  const getPRStatusColor = (status) => {
-    switch (status) {
-      case 'approved': return 'bg-green-100 text-success'
-      case 'pending': return 'bg-yellow-100 text-warning'
-      case 'changes-requested': return 'bg-red-100 text-danger'
-      default: return 'bg-gray-100 text-secondary-text'
-    }
+  const getPriorityColor = (priority) => ({
+    critical: 'text-red-600 bg-red-50 border-red-100',
+    high: 'text-orange-600 bg-orange-50 border-orange-100',
+    medium: 'text-blue-600 bg-blue-50 border-blue-100',
+    low: 'text-emerald-600 bg-emerald-50 border-emerald-100',
+  }[priority] || 'text-gray-600 bg-gray-50');
+
+  const statusOptions = [
+    { value: 'todo', label: 'To Do', icon: Clock, color: 'text-gray-400' },
+    { value: 'in_progress', label: 'In Progress', icon: PlayCircle, color: 'text-blue-500' },
+    { value: 'in_review', label: 'In Review', icon: MessageSquare, color: 'text-purple-500' },
+    { value: 'blocked', label: 'Blocked', icon: AlertCircle, color: 'text-red-500' },
+    { value: 'done', label: 'Done', icon: CheckCircle2, color: 'text-emerald-500' }
+  ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-6"
-    >
-      <div>
-        <h1 className="text-2xl font-semibold text-primary-text mb-2">Developer Dashboard</h1>
-        <p className="text-secondary-text">Personal tasks and performance metrics</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Developer Dashboard</h1>
+          <p className="text-gray-500 mt-1">Track your progress and sync updates to Jira</p>
+        </div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm disabled:opacity-50"
+        >
+          {syncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} className="text-indigo-600" />}
+          Sync Integrations
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-secondary-text">Assigned Tasks</p>
-                  <p className="text-2xl font-semibold text-primary-text mt-1">5</p>
-                </div>
-                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                  <CheckSquare className="text-primary-accent" size={24} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+      {/* Performance Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="md:col-span-2 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-6 text-white shadow-xl shadow-indigo-200">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-indigo-100 text-sm font-medium">Performance Score</p>
+              <h2 className="text-4xl font-bold mt-1">{performance?.score || 0}%</h2>
+              <p className="text-indigo-100 text-xs mt-2 uppercase tracking-wide font-bold">
+                Level: {performance?.level?.replace('_', ' ') || 'Calculating...'}
+              </p>
+            </div>
+            <Award size={48} className="text-indigo-400/50" />
+          </div>
+          <div className="mt-6 grid grid-cols-3 gap-2">
+            <div className="bg-white/10 rounded-xl p-2 text-center">
+              <p className="text-[10px] text-indigo-200">On Time</p>
+              <p className="text-sm font-bold">{Math.round((performance?.breakdown?.on_time_rate || 0) * 100)}%</p>
+            </div>
+            <div className="bg-white/10 rounded-xl p-2 text-center">
+              <p className="text-[10px] text-indigo-200">Efficiency</p>
+              <p className="text-sm font-bold">{Math.round((performance?.breakdown?.efficiency || 0) * 100)}%</p>
+            </div>
+            <div className="bg-white/10 rounded-xl p-2 text-center">
+              <p className="text-[10px] text-indigo-200">Consistency</p>
+              <p className="text-sm font-bold">{Math.round((performance?.breakdown?.consistency || 0) * 100)}%</p>
+            </div>
+          </div>
+        </div>
 
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-secondary-text">Active Branches</p>
-                  <p className="text-2xl font-semibold text-primary-text mt-1">4</p>
-                </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <GitBranch className="text-blue-600" size={24} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="p-3 bg-emerald-50 rounded-xl w-fit mb-3">
+            <CheckCircle2 size={24} className="text-emerald-500" />
+          </div>
+          <p className="text-sm text-gray-500 font-medium">Tasks Completed</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{performance?.stats?.completed_tasks || 0}</p>
+        </div>
 
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-secondary-text">Open PRs</p>
-                  <p className="text-2xl font-semibold text-primary-text mt-1">3</p>
-                </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <GitPullRequest className="text-success" size={24} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-secondary-text">Efficiency</p>
-                  <p className="text-2xl font-semibold text-primary-text mt-1">90%</p>
-                </div>
-                <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="text-warning" size={24} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="p-3 bg-blue-50 rounded-xl w-fit mb-3">
+            <Zap size={24} className="text-blue-500" />
+          </div>
+          <p className="text-sm text-gray-500 font-medium">Story Points Delivered</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{performance?.stats?.points_delivered || 0}</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Assigned Tasks</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {assignedTasks.map((task, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-1">
-                        <span className="font-medium text-primary-text">{task.id}</span>
-                        <span className={`text-xs px-2 py-1 rounded ${getPriorityColor(task.priority)}`}>
-                          {task.priority}
+      {/* Task List */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <ListChecks size={20} className="text-indigo-500" />
+            My Assigned Tasks
+          </h2>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Find a task..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-48 lg:w-64"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4">
+          {tasks.filter(t =>
+            t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            t.project_key?.toLowerCase().includes(searchTerm.toLowerCase())
+          ).length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+              <Clock size={40} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-gray-500 font-medium">
+                {searchTerm ? 'No tasks match your search.' : 'Looking good! No tasks assigned yet.'}
+              </p>
+            </div>
+          ) : (
+            tasks
+              .filter(t =>
+                t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                t.project_key?.toLowerCase().includes(searchTerm.toLowerCase())
+              )
+              .map(task => (
+                <motion.div
+                  key={task.id}
+                  layout
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 lg:p-5 flex flex-col lg:flex-row lg:items-center gap-4 hover:border-indigo-200 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1">
+                      <span className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold uppercase tracking-wider ${getPriorityColor(task.priority)}`}>
+                        {task.priority}
+                      </span>
+                      <span className="text-xs text-indigo-600 font-bold">{task.project_key}</span>
+                      {task.jira_key && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">
+                          <Zap size={10} />
+                          Synced
                         </span>
-                      </div>
-                      <p className="text-sm text-primary-text">{task.title}</p>
-                      <p className="text-xs text-secondary-text mt-1">Due: {task.dueDate}</p>
+                      )}
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusColor(task.status)}`}>
-                        {task.status.replace('-', ' ')}
-                      </span>
+                    <h3 className="font-bold text-gray-900 truncate">{task.title}</h3>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 font-medium">
+                      <div className="flex items-center gap-1">
+                        <Clock size={14} />
+                        Due {new Date(task.due_date).toLocaleDateString()}
+                      </div>
+                      {task.jira_key && (
+                        <div className="flex items-center gap-1 text-blue-600 font-bold">
+                          <GitBranch size={14} />
+                          {task.jira_key}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                        {task.story_points} Points
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
 
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Branch Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {branchStatus.map((branch, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <GitBranch size={20} className="text-secondary-text" />
-                      <div>
-                        <p className="font-medium text-primary-text">{branch.name}</p>
-                        <p className="text-sm text-secondary-text">{branch.commits} commits • {branch.lastUpdate}</p>
-                      </div>
+                  <div className="flex items-center gap-2 lg:border-l lg:pl-6 lg:border-gray-100">
+                    <div className="grid grid-cols-5 gap-1 bg-gray-50 p-1 rounded-xl">
+                      {statusOptions.map(opt => {
+                        const isActive = task.status === opt.value;
+                        const Icon = opt.icon;
+
+                        return (
+                          <button
+                            key={opt.value}
+                            onClick={() => handleUpdateStatus(task.id, opt.value)}
+                            disabled={updatingId === task.id || isActive}
+                            title={opt.label}
+                            className={`p-2 rounded-lg transition-all relative ${isActive
+                              ? `bg-white shadow-sm ${opt.color}`
+                              : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                              }`}
+                          >
+                            {updatingId === task.id && isActive ? (
+                              <Loader2 size={18} className="animate-spin" />
+                            ) : (
+                              <Icon size={18} />
+                            )}
+                            {isActive && (
+                              <motion.div
+                                layoutId={`active-status-${task.id}`}
+                                className="absolute inset-0 border-2 border-indigo-500/20 rounded-lg"
+                              />
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <div className={`w-2 h-2 rounded-full ${
-                        branch.status === 'clean' ? 'bg-success' :
-                        branch.status === 'ahead' ? 'bg-blue-600' :
-                        'bg-warning'
-                      }`}></div>
-                      <span className={`text-sm font-medium ${getBranchStatusColor(branch.status)}`}>
-                        {branch.status}
-                      </span>
-                    </div>
+                    <button className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors">
+                      <ExternalLink size={20} />
+                    </button>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+                </motion.div>
+              ))
+          )}
+        </div>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Pull Requests</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {prStatus.map((pr, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
-                        <GitPullRequest size={16} className="text-primary-accent" />
-                        <span className="font-medium text-primary-text">{pr.id}</span>
-                      </div>
-                      <p className="text-sm text-primary-text mt-1">{pr.title}</p>
-                      <p className="text-xs text-secondary-text mt-1">
-                        {pr.reviews} reviews • {pr.time}
-                      </p>
-                    </div>
-                    <span className={`px-2 py-1 text-xs font-medium rounded ${getPRStatusColor(pr.status)}`}>
-                      {pr.status.replace('-', ' ')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Performance Metrics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={performanceMetrics}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="month" stroke="#6B7280" />
-                  <YAxis stroke="#6B7280" />
-                  <Tooltip />
-                  <Line 
-                    type="monotone" 
-                    dataKey="tasks" 
-                    stroke="#4F46E5" 
-                    strokeWidth={2}
-                    name="Tasks Assigned"
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="completed" 
-                    stroke="#16A34A" 
-                    strokeWidth={2}
-                    name="Tasks Completed"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-    </motion.div>
-  )
-}
-
-export default DeveloperDashboard
+    </div>
+  );
+};

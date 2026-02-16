@@ -1,268 +1,336 @@
-import React, { useState } from 'react'
-import { motion } from 'framer-motion'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
-import { Button } from '@/components/ui/Button'
-import { CheckSquare, Clock, AlertTriangle, Users, GitPullRequest, TrendingUp } from 'lucide-react'
-
-const kanbanTasks = {
-  todo: [
-    { id: 1, title: 'Setup authentication flow', priority: 'high', assignee: 'John Doe' },
-    { id: 2, title: 'Design user profile page', priority: 'medium', assignee: 'Jane Smith' },
-    { id: 3, title: 'Implement search functionality', priority: 'low', assignee: 'Mike Johnson' },
-  ],
-  inProgress: [
-    { id: 4, title: 'Build dashboard components', priority: 'high', assignee: 'Sarah Wilson' },
-    { id: 5, title: 'Integrate payment API', priority: 'high', assignee: 'Tom Brown' },
-  ],
-  review: [
-    { id: 6, title: 'Add unit tests', priority: 'medium', assignee: 'John Doe' },
-    { id: 7, title: 'Optimize database queries', priority: 'medium', assignee: 'Jane Smith' },
-  ],
-  done: [
-    { id: 8, title: 'Setup project structure', priority: 'high', assignee: 'Mike Johnson' },
-    { id: 9, title: 'Create CI/CD pipeline', priority: 'high', assignee: 'Sarah Wilson' },
-  ],
-}
-
-const prReviewQueue = [
-  { id: '#234', title: 'Fix authentication bug', author: 'John Doe', files: 5, time: '2 hours ago' },
-  { id: '#235', title: 'Add payment integration', author: 'Jane Smith', files: 12, time: '4 hours ago' },
-  { id: '#236', title: 'Update user dashboard', author: 'Mike Johnson', files: 8, time: '6 hours ago' },
-  { id: '#237', title: 'Optimize database queries', author: 'Sarah Wilson', files: 3, time: '1 day ago' },
-]
-
-const developerWorkload = [
-  { name: 'John Doe', tasks: 8, completed: 6, efficiency: 75 },
-  { name: 'Jane Smith', tasks: 10, completed: 8, efficiency: 80 },
-  { name: 'Mike Johnson', tasks: 6, completed: 4, efficiency: 67 },
-  { name: 'Sarah Wilson', tasks: 9, completed: 7, efficiency: 78 },
-  { name: 'Tom Brown', tasks: 7, completed: 5, efficiency: 71 },
-]
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuthStore } from '@/store/authStore';
+import { useToast } from '@/components/ui/Toast';
+import api from '@/services/api';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  ListChecks, Users, Plus, X, Loader2, Calendar, Target,
+  CheckCircle2, Clock, BarChart2, Briefcase, Zap, GitPullRequest
+} from 'lucide-react';
 
 export const TeamLeaderDashboard = () => {
-  const [draggedTask, setDraggedTask] = useState(null)
+  const { user } = useAuthStore();
+  const toast = useToast();
+  const [scopes, setScopes] = useState([]);
+  const [developers, setDevelopers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [selectedScope, setSelectedScope] = useState(null);
+  const [creatingTask, setCreatingTask] = useState(false);
+  const [newTask, setNewTask] = useState({
+    title: '', description: '', assigned_to: '', priority: 'medium',
+    story_points: 0, estimated_hours: 0, due_date: '', sync_jira: true
+  });
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
+  const fetchData = useCallback(async () => {
+    try {
+      // First get all projects to find scopes across them
+      const projData = await api.getProjects();
+      const allProjects = projData.projects || [];
+
+      // Fetch scopes for each project (could be optimized, but works for now)
+      const scopesPromises = allProjects.map(p => api.getScopes(p.id));
+      const scopesResults = await Promise.all(scopesPromises);
+
+      // Filter scopes assigned to THIS team leader
+      const filteredScopes = scopesResults.flatMap(res => res.scopes || [])
+        .filter(s => s.team_leader_id === user.id);
+
+      const devData = await api.getUsers('developer');
+
+      setScopes(filteredScopes);
+      setDevelopers(devData.users || []);
+    } catch (error) {
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
     }
-  }
+  }, [user.id, toast]);
 
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.5
-      }
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleCreateTask = async (e) => {
+    e.preventDefault();
+    if (!selectedScope) return;
+    setCreatingTask(true);
+    try {
+      await api.createTask(selectedScope.project_id, {
+        ...newTask,
+        scope_id: selectedScope.id
+      });
+      toast.success('Task created and assigned to developer');
+      setShowTaskModal(false);
+      setNewTask({
+        title: '', description: '', assigned_to: '', priority: 'medium',
+        story_points: 0, estimated_hours: 0, due_date: '', sync_jira: true
+      });
+      fetchData();
+    } catch (error) {
+      toast.error(error.message || 'Failed to create task');
+    } finally {
+      setCreatingTask(false);
     }
-  }
+  };
 
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'high': return 'bg-danger text-white'
-      case 'medium': return 'bg-warning text-white'
-      case 'low': return 'bg-gray-200 text-gray-700'
-      default: return 'bg-gray-200 text-gray-700'
-    }
-  }
-
-  const handleDragStart = (task) => {
-    setDraggedTask(task)
-  }
-
-  const handleDragOver = (e) => {
-    e.preventDefault()
-  }
-
-  const handleDrop = (e, column) => {
-    e.preventDefault()
-    // Handle task movement between columns
-    setDraggedTask(null)
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-6"
-    >
-      <div>
-        <h1 className="text-2xl font-semibold text-primary-text mb-2">Team Leader Dashboard</h1>
-        <p className="text-secondary-text">Task management and team performance overview</p>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Team Leader Hub</h1>
+          <p className="text-gray-500 mt-1">Manage scopes and delegate tasks to developers</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-secondary-text">Total Tasks</p>
-                  <p className="text-2xl font-semibold text-primary-text mt-1">32</p>
-                </div>
-                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                  <CheckSquare className="text-primary-accent" size={24} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-secondary-text">In Progress</p>
-                  <p className="text-2xl font-semibold text-primary-text mt-1">12</p>
-                </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Clock className="text-blue-600" size={24} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-secondary-text">Sprint Risk</p>
-                  <p className="text-2xl font-semibold text-warning mt-1">24%</p>
-                </div>
-                <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <AlertTriangle className="text-warning" size={24} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-secondary-text">Team Size</p>
-                  <p className="text-2xl font-semibold text-primary-text mt-1">5</p>
-                </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Users className="text-success" size={24} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+      {/* Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+            <Target size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 font-medium">Assigned Scopes</p>
+            <p className="text-2xl font-bold text-gray-900">{scopes.length}</p>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+            <ListChecks size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 font-medium">Total Tasks</p>
+            <p className="text-2xl font-bold text-gray-900">
+              {scopes.reduce((acc, s) => acc + parseInt(s.task_count || 0), 0)}
+            </p>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center text-orange-600">
+            <Users size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-gray-500 font-medium">Team Force</p>
+            <p className="text-2xl font-bold text-gray-900">{developers.length} Devs</p>
+          </div>
+        </div>
       </div>
 
-      <motion.div variants={itemVariants}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Kanban Board</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-              {Object.entries(kanbanTasks).map(([column, tasks]) => (
-                <div
-                  key={column}
-                  className="bg-gray-50 rounded-lg p-4"
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, column)}
-                >
-                  <h3 className="font-medium text-primary-text mb-3 capitalize">
-                    {column.replace(/([A-Z])/g, ' $1').trim()}
-                  </h3>
-                  <div className="space-y-2">
-                    {tasks.map((task) => (
-                      <div
-                        key={task.id}
-                        draggable
-                        onDragStart={() => handleDragStart(task)}
-                        className="bg-white p-3 rounded-lg border border-border cursor-move hover:shadow-md transition-shadow"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <span className={`text-xs px-2 py-1 rounded ${getPriorityColor(task.priority)}`}>
-                            {task.priority}
-                          </span>
-                        </div>
-                        <p className="text-sm font-medium text-primary-text mb-2">
-                          {task.title}
-                        </p>
-                        <p className="text-xs text-secondary-text">
-                          {task.assignee}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </motion.div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardHeader>
-              <CardTitle>PR Review Queue</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {prReviewQueue.map((pr, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
-                        <GitPullRequest size={16} className="text-primary-accent" />
-                        <span className="font-medium text-primary-text">{pr.id}</span>
-                        <span className="text-sm text-secondary-text">{pr.title}</span>
-                      </div>
-                      <p className="text-xs text-secondary-text mt-1">
-                        {pr.author} • {pr.files} files • {pr.time}
-                      </p>
+      {/* Scopes & Tasks */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-bold text-gray-900">My Active Scopes</h2>
+        {scopes.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+            <Briefcase size={40} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-gray-500">No scopes assigned to you yet.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {scopes.map(scope => (
+              <motion.div
+                key={scope.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col"
+              >
+                <div className="p-5 flex-1">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-gray-900 text-lg">{scope.title}</h3>
+                    <div className="flex items-center gap-2 text-xs font-semibold text-gray-400">
+                      <Calendar size={14} />
+                      {new Date(scope.deadline).toLocaleDateString()}
                     </div>
-                    <Button size="sm" variant="secondary">
-                      Review
-                    </Button>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+                  <p className="text-sm text-gray-500 mb-4 line-clamp-2">{scope.description}</p>
 
-        <motion.div variants={itemVariants}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Developer Workload</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={developerWorkload}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="name" stroke="#6B7280" />
-                  <YAxis stroke="#6B7280" />
-                  <Tooltip />
-                  <Bar dataKey="tasks" fill="#4F46E5" name="Total Tasks" />
-                  <Bar dataKey="completed" fill="#16A34A" name="Completed" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </motion.div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span className="text-gray-500">Execution Progress</span>
+                      <span className="text-indigo-600">
+                        {scope.task_count > 0 ? Math.round((scope.completed_tasks / scope.task_count) * 100) : 0}%
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-500 transition-all duration-500"
+                        style={{ width: `${scope.task_count > 0 ? (scope.completed_tasks / scope.task_count) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <div className="flex gap-4 text-xs font-medium text-gray-500">
+                      <div className="flex items-center gap-1">
+                        <CheckCircle2 size={14} className="text-emerald-500" />
+                        {scope.completed_tasks} Done
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock size={14} className="text-amber-500" />
+                        {scope.task_count - scope.completed_tasks} Pending
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-gray-50/50 p-4 border-t border-gray-100 flex gap-2">
+                  <button
+                    onClick={() => { setSelectedScope(scope); setShowTaskModal(true); }}
+                    className="flex-1 py-2 bg-white border border-indigo-200 text-indigo-600 font-bold rounded-xl text-xs hover:bg-indigo-50 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Plus size={14} /> New Task
+                  </button>
+                  <button className="flex-1 py-2 bg-white border border-gray-200 text-gray-600 font-bold rounded-xl text-xs hover:bg-gray-100 transition-colors">
+                    Manage Board
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
-    </motion.div>
-  )
-}
 
-export default TeamLeaderDashboard
+      {/* New Task Modal */}
+      <AnimatePresence>
+        {showTaskModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                <h2 className="text-xl font-bold text-gray-900">Create & Delegate Task</h2>
+                <button onClick={() => setShowTaskModal(false)} className="p-2 rounded-xl hover:bg-gray-100">
+                  <X size={18} />
+                </button>
+              </div>
+              <form onSubmit={handleCreateTask} className="p-6 space-y-4">
+                <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 mb-2">
+                  <p className="text-xs font-bold text-indigo-600 uppercase mb-1">Scope Context</p>
+                  <p className="text-sm font-semibold text-indigo-900">{selectedScope?.title}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Task Title</label>
+                  <input
+                    type="text" required
+                    value={newTask.title}
+                    onChange={e => setNewTask(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    placeholder="e.g., Implement Authentication Controller"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+                  <textarea
+                    rows={3}
+                    value={newTask.description}
+                    onChange={e => setNewTask(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                    placeholder="Details about implementation requirements..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to Developer</label>
+                    <select
+                      required
+                      value={newTask.assigned_to}
+                      onChange={e => setNewTask(prev => ({ ...prev, assigned_to: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      <option value="">Select Developer</option>
+                      {developers.map(dev => (
+                        <option key={dev.id} value={dev.id}>{dev.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Due Date</label>
+                    <input
+                      type="date" required
+                      value={newTask.due_date}
+                      onChange={e => setNewTask(prev => ({ ...prev, due_date: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority</label>
+                    <select
+                      value={newTask.priority}
+                      onChange={e => setNewTask(prev => ({ ...prev, priority: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none capitalize"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Story Points</label>
+                    <input
+                      type="number" min="0" max="20"
+                      value={newTask.story_points}
+                      onChange={e => setNewTask(prev => ({ ...prev, story_points: parseInt(e.target.value) }))}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Est. Hours</label>
+                    <input
+                      type="number" min="0"
+                      value={newTask.estimated_hours}
+                      onChange={e => setNewTask(prev => ({ ...prev, estimated_hours: parseInt(e.target.value) }))}
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-xl space-y-3">
+                  <p className="text-xs font-bold text-gray-400 uppercase">Automation</p>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={newTask.sync_jira}
+                      onChange={e => setNewTask(prev => ({ ...prev, sync_jira: e.target.checked }))}
+                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div className="flex items-center gap-2">
+                      <GitPullRequest size={16} className="text-gray-500" />
+                      <span className="text-sm text-gray-700 font-medium">Auto-create Jira Issue & Sync Status</span>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowTaskModal(false)}
+                    className="flex-1 py-3 border border-gray-200 text-gray-700 font-bold rounded-2xl hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit" disabled={creatingTask}
+                    className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-2xl shadow-xl shadow-indigo-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {creatingTask ? <Loader2 size={20} className="animate-spin" /> : <><Plus size={20} /> Deploy Task</>}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};

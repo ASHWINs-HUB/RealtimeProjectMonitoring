@@ -1,196 +1,136 @@
-import { UserModel } from '../models/userModel.js';
-import { ProjectModel } from '../models/projectModel.js';
-import { TaskModel } from '../models/taskModel.js';
+import bcryptjs from 'bcryptjs';
+import pool from '../config/database.js';
 import logger from './logger.js';
+import { mlAnalytics } from '../services/mlAnalytics.js';
 
 export const seedDatabase = async () => {
+  const client = await pool.connect();
   try {
-    logger.info('Starting database seeding...');
-
-    // Create sample users
-    const users = [
-      {
-        name: 'John Doe',
-        email: 'john@company.com',
-        role: 'hr',
-        password: 'password123'
-      },
-      {
-        name: 'Jane Smith',
-        email: 'jane@company.com',
-        role: 'manager',
-        password: 'password123'
-      },
-      {
-        name: 'Mike Johnson',
-        email: 'mike@company.com',
-        role: 'team_leader',
-        password: 'password123'
-      },
-      {
-        name: 'Sarah Wilson',
-        email: 'sarah@company.com',
-        role: 'developer',
-        password: 'password123'
+    // Check if users already exist
+    const existingUsers = await client.query('SELECT COUNT(*) FROM users');
+    if (parseInt(existingUsers.rows[0].count) > 0) {
+      logger.info('Database already seeded, skipping...');
+      const firstUser = await client.query('SELECT email FROM users LIMIT 1');
+      if (firstUser.rows[0].email !== 'hr@projectpulse.io') {
+        logger.info('Wiping and re-seeding to ensure clean state...');
+      } else {
+        return;
       }
+    }
+
+    await client.query('BEGIN');
+
+    const salt = await bcryptjs.genSalt(12);
+    const password = await bcryptjs.hash('password123', salt);
+
+    // 1. Create Users
+    const usersData = [
+      { name: 'Sarah HR', email: 'hr@projectpulse.io', password, role: 'hr', department: 'Human Resources' },
+      { name: 'Alex Manager', email: 'manager@projectpulse.io', password, role: 'manager', department: 'Engineering' },
+      { name: 'Taylor Lead', email: 'lead@projectpulse.io', password, role: 'team_leader', department: 'Engineering' },
+      { name: 'Casey Dev', email: 'dev@projectpulse.io', password, role: 'developer', department: 'Engineering' }
     ];
 
-    const createdUsers = [];
-    for (const userData of users) {
-      try {
-        const user = await UserModel.create(userData);
-        createdUsers.push(user);
-        logger.info(`Created user: ${user.name}`);
-      } catch (error) {
-        // User might already exist
-        const existingUser = await UserModel.getByEmail(userData.email);
-        if (existingUser) {
-          createdUsers.push(existingUser);
-          logger.info(`User already exists: ${existingUser.name}`);
-        }
-      }
+    const users = [];
+    for (const u of usersData) {
+      const res = await client.query(
+        `INSERT INTO users (name, email, password, role, department) 
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [u.name, u.email, u.password, u.role, u.department]
+      );
+      users.push(res.rows[0]);
     }
 
-    // Create sample projects
-    const projects = [
-      {
-        name: 'E-commerce Platform',
-        description: 'Modern e-commerce platform with React and Node.js',
-        status: 'On Track',
-        progress: 75,
-        risk: 12,
-        deadline: '2024-03-15',
-        repo_url: 'https://github.com/company/ecommerce-platform',
-        repo_name: 'ecommerce-platform',
-        project_key: 'ECOM',
-        team_leader: 'Mike Johnson',
-        created_by: createdUsers[1]?.id || 2 // Jane Smith (manager)
-      },
-      {
-        name: 'Mobile App Redesign',
-        description: 'Complete redesign of the mobile application',
-        status: 'At Risk',
-        progress: 45,
-        risk: 68,
-        deadline: '2024-02-28',
-        repo_url: 'https://github.com/company/mobile-app',
-        repo_name: 'mobile-app',
-        project_key: 'MOBILE',
-        team_leader: 'Mike Johnson',
-        created_by: createdUsers[1]?.id || 2 // Jane Smith (manager)
-      },
-      {
-        name: 'API Integration',
-        description: 'Third-party API integration for payment processing',
-        status: 'On Track',
-        progress: 90,
-        risk: 8,
-        deadline: '2024-03-30',
-        repo_url: 'https://github.com/company/api-integration',
-        repo_name: 'api-integration',
-        project_key: 'API',
-        team_leader: 'Mike Johnson',
-        created_by: createdUsers[1]?.id || 2 // Jane Smith (manager)
-      },
-      {
-        name: 'Database Migration',
-        description: 'Migrate legacy database to PostgreSQL',
-        status: 'Delayed',
-        progress: 30,
-        risk: 45,
-        deadline: '2024-04-10',
-        repo_url: 'https://github.com/company/db-migration',
-        repo_name: 'db-migration',
-        project_key: 'DB',
-        team_leader: 'Mike Johnson',
-        created_by: createdUsers[1]?.id || 2 // Jane Smith (manager)
-      }
+    const hr = users.find(u => u.role === 'hr');
+    const manager = users.find(u => u.role === 'manager');
+    const lead = users.find(u => u.role === 'team_leader');
+    const dev = users.find(u => u.role === 'developer');
+
+    // 2. Create Projects
+    const projectsData = [
+      { name: 'Cloud Migration 2026', key: 'CLOUD', status: 'on_track', priority: 'high', progress: 65, deadline: '2026-12-01' },
+      { name: 'Mobile App Phoenix', key: 'PHOENIX', status: 'at_risk', priority: 'critical', progress: 42, deadline: '2026-10-15' },
+      { name: 'Data Pipeline API', key: 'DATA', status: 'active', priority: 'medium', progress: 15, deadline: '2027-02-20' },
+      { name: 'Legacy System Patch', key: 'LEGACY', status: 'delayed', priority: 'high', progress: 88, deadline: '2026-08-30' }
     ];
 
-    const createdProjects = [];
-    for (const projectData of projects) {
-      try {
-        const project = await ProjectModel.create(projectData);
-        createdProjects.push(project);
-        logger.info(`Created project: ${project.name}`);
-      } catch (error) {
-        // Project might already exist
-        logger.warn(`Project might already exist: ${projectData.name}`);
-      }
+    const projects = [];
+    for (const p of projectsData) {
+      const res = await client.query(
+        `INSERT INTO projects (name, project_key, description, status, priority, progress, deadline, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [p.name, p.key, `Sample project: ${p.name}`, p.status, p.priority, p.progress, p.deadline, hr.id]
+      );
+      projects.push(res.rows[0]);
     }
 
-    // Create sample tasks
-    const tasks = [
-      {
-        project_id: createdProjects[0]?.id || 1,
-        title: 'Setup authentication',
-        description: 'Implement JWT-based authentication system',
-        status: 'completed',
-        assignee: 'John Doe'
-      },
-      {
-        project_id: createdProjects[0]?.id || 1,
-        title: 'Create user dashboard',
-        description: 'Build responsive user dashboard with analytics',
-        status: 'in-progress',
-        assignee: 'Jane Smith'
-      },
-      {
-        project_id: createdProjects[1]?.id || 2,
-        title: 'Design mobile screens',
-        description: 'Create UI/UX designs for mobile app screens',
-        status: 'in-progress',
-        assignee: 'Mike Johnson'
-      },
-      {
-        project_id: createdProjects[1]?.id || 2,
-        title: 'Implement navigation',
-        description: 'Implement mobile app navigation system',
-        status: 'todo',
-        assignee: 'Sarah Wilson'
-      },
-      {
-        project_id: createdProjects[2]?.id || 3,
-        title: 'Payment gateway integration',
-        description: 'Integrate Stripe payment gateway',
-        status: 'completed',
-        assignee: 'Sarah Wilson'
-      },
-      {
-        project_id: createdProjects[3]?.id || 4,
-        title: 'Database schema design',
-        description: 'Design new PostgreSQL database schema',
-        status: 'completed',
-        assignee: 'Mike Johnson'
-      }
-    ];
-
-    for (const taskData of tasks) {
-      try {
-        const task = await TaskModel.create(taskData);
-        logger.info(`Created task: ${task.title}`);
-      } catch (error) {
-        logger.warn(`Task might already exist: ${taskData.title}`);
-      }
+    // 3. Assign Manager to Projects
+    for (const p of projects) {
+      await client.query(
+        `INSERT INTO project_managers (project_id, manager_id, status, accepted_at)
+         VALUES ($1, $2, 'accepted', CURRENT_TIMESTAMP)`,
+        [p.id, manager.id]
+      );
     }
 
-    // Add team members to projects
-    for (const project of createdProjects) {
-      for (const user of createdUsers) {
-        if (user.role !== 'hr' && user.name !== project.team_leader) {
-          try {
-            await UserModel.addToProject(user.id, project.id, 'member');
-            logger.info(`Added ${user.name} to project ${project.name}`);
-          } catch (error) {
-            logger.warn(`User ${user.name} might already be in project ${project.name}`);
-          }
-        }
-      }
-    }
+    // 4. Create Scopes for Team Leader
+    const cloudProject = projects.find(p => p.project_key === 'CLOUD');
+    const phoenixProject = projects.find(p => p.project_key === 'PHOENIX');
 
-    logger.info('Database seeding completed successfully!');
+    const scopesRes = await client.query(
+      `INSERT INTO scopes (project_id, assigned_by, team_leader_id, title, description, deadline)
+       VALUES 
+       ($1, $2, $3, 'Infrastructure Setup', 'Set up AWS landing zone', '2026-09-15'),
+       ($4, $2, $3, 'Mobile Auth Layer', 'Implement biometrics and JWT', '2026-08-20')
+       RETURNING *`,
+      [cloudProject.id, manager.id, lead.id, phoenixProject.id]
+    );
+    const scope1 = scopesRes.rows[0];
+    const scope2 = scopesRes.rows[1];
+
+    // 5. Create Tasks for Developer
+    await client.query(
+      `INSERT INTO tasks (project_id, scope_id, title, description, status, priority, assigned_to, assigned_by, story_points, due_date)
+       VALUES 
+       ($1, $2, 'Provision VPC', 'Terraform apply for dev enviroment', 'done', 'high', $3, $4, 5, '2026-09-10'),
+       ($1, $2, 'Configure S3 Buckets', 'Set up lifecycle policies', 'in_progress', 'medium', $3, $4, 3, '2026-09-12'),
+       ($5, $6, 'Auth UI Screens', 'React Native views for login', 'todo', 'high', $3, $4, 8, '2026-08-15')`,
+      [cloudProject.id, scope1.id, dev.id, lead.id, phoenixProject.id, scope2.id]
+    );
+
+    // 6. Create Notifications
+    await client.query(
+      `INSERT INTO notifications (user_id, title, message, type)
+       VALUES ($1, 'Welcome to ProjectPulse', 'Your account has been successfully set up.', 'success')`,
+      [hr.id]
+    );
+    await client.query(
+      `INSERT INTO notifications (user_id, title, message, type)
+       VALUES ($1, 'New Project Assignment', 'You have 4 projects waiting for oversight.', 'info')`,
+      [manager.id]
+    );
+
+    await client.query('COMMIT');
+
+    logger.info('Database seeded with base data. Computing ML metrics...');
+
+    // 7. Compute ML metrics immediately after seeding
+    await mlAnalytics.computeAllMetrics();
+
+    logger.info('Database seeded and ML metrics computed!');
   } catch (error) {
-    logger.error('Error seeding database:', error);
+    await client.query('ROLLBACK');
+    logger.error('Seeding failed:', error.message);
     throw error;
+  } finally {
+    client.release();
   }
 };
+
+// Run directly
+if (process.argv[1]?.includes('seeder')) {
+  import('dotenv').then(d => d.config());
+  seedDatabase()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
+}

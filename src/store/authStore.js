@@ -1,43 +1,95 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import api from '../services/api';
 
 export const useAuthStore = create(
   persist(
     (set, get) => ({
       user: null,
       isAuthenticated: false,
-      isLoading: false,
-      
-      login: (userData) => {
-        set({
-          user: userData,
-          isAuthenticated: true,
-          isLoading: false
-        })
+      isLoading: true,
+      error: null,
+
+      login: async (email, password) => {
+        set({ isLoading: true, error: null });
+        try {
+          const data = await api.login(email, password);
+          set({
+            user: data.user,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null
+          });
+          return data;
+        } catch (error) {
+          set({ isLoading: false, error: error.message });
+          throw error;
+        }
       },
-      
+
+      register: async (userData) => {
+        set({ isLoading: true, error: null });
+        try {
+          const data = await api.register(userData);
+          set({
+            user: data.user,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null
+          });
+          return data;
+        } catch (error) {
+          set({ isLoading: false, error: error.message });
+          throw error;
+        }
+      },
+
       logout: () => {
+        api.logout();
         set({
           user: null,
           isAuthenticated: false,
-          isLoading: false
-        })
+          isLoading: false,
+          error: null
+        });
       },
-      
-      setLoading: (loading) => {
-        set({ isLoading: loading })
+
+      checkAuth: async () => {
+        const token = localStorage.getItem('pp_token');
+        if (!token) {
+          set({ isLoading: false, isAuthenticated: false });
+          return;
+        }
+        try {
+          const data = await api.getMe();
+          set({
+            user: data.user,
+            isAuthenticated: true,
+            isLoading: false
+          });
+        } catch {
+          api.logout();
+          set({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false
+          });
+        }
       },
-      
+
+      setLoading: (loading) => set({ isLoading: loading }),
+      clearError: () => set({ error: null }),
+
       updateUser: (userData) => {
-        set({ user: { ...get().user, ...userData } })
+        set({ user: { ...get().user, ...userData } });
       }
     }),
     {
-      name: 'auth-storage',
+      name: 'pp-auth',
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated
       })
     }
   )
-)
+);

@@ -1,41 +1,49 @@
 import { Router } from 'express';
-import { 
-  createProject, 
-  getAllProjects, 
-  getProjectById, 
-  updateProject, 
-  deleteProject, 
-  createTask, 
-  getProjectTasks, 
-  getProjectStats 
+import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
+import { validateCreateProject, validateCreateTask, validateUpdateTaskStatus, validateCreateScope } from '../middleware/validation.js';
+import {
+  createProject, getProjects, getProjectById, updateProject,
+  acceptProject, declineProject, getProjectStats
 } from '../controllers/projectController.js';
-import { validateWebhookAuth } from '../middleware/auth.js';
-import { validateCreateProject } from '../middleware/validation.js';
+import {
+  createScope, getScopes, createTask, getAssignedTasks,
+  updateTaskStatus, getProjectTasks, getTeams, createTeam,
+  getNotifications, markNotificationRead, markAllNotificationsRead
+} from '../controllers/taskController.js';
 
 const router = Router();
 
-// POST /create-project - Main webhook endpoint
-router.post('/create-project', validateWebhookAuth, validateCreateProject, createProject);
+// All routes require authentication
+router.use(authenticateToken);
 
-// GET /projects - Get all projects
-router.get('/projects', getAllProjects);
-
-// GET /projects/stats - Get project statistics
-router.get('/projects/stats', getProjectStats);
-
-// GET /projects/:id - Get project by ID
+// ============ PROJECT ROUTES ============
+router.post('/projects', authorizeRoles('hr'), validateCreateProject, createProject);
+router.get('/projects', getProjects);
+router.get('/projects/stats', authorizeRoles('hr', 'manager'), getProjectStats);
 router.get('/projects/:id', getProjectById);
+router.put('/projects/:id', authorizeRoles('hr', 'manager'), updateProject);
 
-// PUT /projects/:id - Update project
-router.put('/projects/:id', updateProject);
+// Manager accept/decline
+router.post('/projects/:id/accept', authorizeRoles('manager'), acceptProject);
+router.post('/projects/:id/decline', authorizeRoles('manager'), declineProject);
 
-// DELETE /projects/:id - Delete project
-router.delete('/projects/:id', deleteProject);
+// ============ SCOPE ROUTES ============
+router.post('/projects/:projectId/scopes', authorizeRoles('manager'), validateCreateScope, createScope);
+router.get('/projects/:projectId/scopes', authorizeRoles('hr', 'manager', 'team_leader', 'developer'), getScopes);
 
-// POST /projects/:projectId/tasks - Create task for project
-router.post('/projects/:projectId/tasks', createTask);
-
-// GET /projects/:projectId/tasks - Get tasks for project
+// ============ TASK ROUTES ============
+router.post('/projects/:projectId/tasks', authorizeRoles('team_leader'), validateCreateTask, createTask);
 router.get('/projects/:projectId/tasks', getProjectTasks);
+router.get('/tasks/assigned', authorizeRoles('developer'), getAssignedTasks);
+router.put('/tasks/:taskId/status', authorizeRoles('developer', 'team_leader'), validateUpdateTaskStatus, updateTaskStatus);
+
+// ============ TEAM ROUTES ============
+router.get('/teams', getTeams);
+router.post('/teams', authorizeRoles('team_leader'), createTeam);
+
+// ============ NOTIFICATION ROUTES ============
+router.get('/notifications', getNotifications);
+router.put('/notifications/:id/read', markNotificationRead);
+router.put('/notifications/read-all', markAllNotificationsRead);
 
 export default router;

@@ -1,413 +1,387 @@
+import pool from '../config/database.js';
 import logger from '../utils/logger.js';
-// import githubService from '../services/githubService.js';
-import { ProjectModel } from '../models/projectModel.js';
-import { TaskModel } from '../models/taskModel.js';
-import { UserModel } from '../models/userModel.js';
+import { jiraService } from '../services/jiraService.js';
+import { githubService } from '../services/githubService.js';
 
+// POST /api/projects - HR creates project
 export const createProject = async (req, res, next) => {
+  const client = await pool.connect();
   try {
-    const {
-      projectName,
-      projectKey,
-      description,
-      repoName,
-      private: isPrivate,
-      teamLeader,
-      teamMembers,
-      createdBy
-    } = req.body;
+    await client.query('BEGIN');
 
-    logger.info(`Starting project creation: ${projectName} (${projectKey})`);
+    const { name, description, project_key, priority, deadline, budget, create_github_repo, github_repo_private, manager_ids } = req.body;
 
-    // 1. Create project in database first
-    const projectData = {
-      name: projectName,
-      description,
-      project_key: projectKey,
-      team_leader: teamLeader,
-      created_by: createdBy || 1 // Default to user ID 1 if not provided
-    };
+    // Generate project key if not provided
+    const key = project_key || name.replace(/[^A-Za-z]/g, '').substring(0, 6).toUpperCase();
 
-    const project = await ProjectModel.create(projectData);
-    logger.info(`Project created in database: ${project.name} (ID: ${project.id})`);
+    // 1. Create project in PostgreSQL
+    const projectResult = await client.query(
+      `INSERT INTO projects (name, description, project_key, priority, deadline, budget, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [name, description, key, priority, deadline, budget, req.user.id]
+    );
+    const project = projectResult.rows[0];
 
-    // TODO: Re-enable GitHub integration when database is working
-    /*
+    // 2. Auto-create Jira project
+    let jiraData = null;
+    let jiraWarning = null;
     try {
-      // 2. Create GitHub repository
-      const repo = await githubService.createRepository({
-        name: repoName,
-        description: `${projectName} - ${description}`,
-        private: isPrivate
-      });
+      jiraData = await jiraService.createProject(key, name);
+      await client.query(
+        `INSERT INTO jira_mapping (project_id, jira_project_id, jira_project_key)
+         VALUES ($1, $2, $3)`,
+        [project.id, jiraData.id?.toString(), jiraData.key]
+      );
+      logger.info(`Jira project created: ${jiraData.key}`);
+    } catch (jiraError) {
+      jiraWarning = jiraError.message;
+      logger.warn(`Jira project creation failed (non-blocking): ${jiraError.message}`);
+    }
 
-      logger.info(`Repository created: ${repo.html_url}`);
-
-      // 3. Update project with repo information
-      await ProjectModel.update(project.id, {
-        repo_url: repo.html_url,
-        repo_name: repo.name
-      });
-
-      // 4. Create branches
-      const branches = ['dev', 'staging', 'prod'];
-      for (const branch of branches) {
-        await githubService.createBranch(repo.full_name, 'main', branch);
-        logger.info(`Branch created: ${branch}`);
-      }
-
-      // 5. Create feature branches for each team member
-      const allMembers = [teamLeader, ...teamMembers];
-      for (const member of allMembers) {
-        await githubService.createBranch(repo.full_name, 'dev', `feature/${member}`);
-        logger.info(`Feature branch created: feature/${member}`);
-      }
-
-      // 6. Create README.md
-      const readmeContent = generateReadme(projectName, description, projectKey, teamLeader, teamMembers);
-      await githubService.createFile(repo.full_name, 'main', 'README.md', readmeContent, 'Initial commit: Add README.md');
-      logger.info('README.md created');
-
-      // 7. Create BRANCHING_GUIDE.md
-      const branchingGuideContent = generateBranchingGuide();
-      await githubService.createFile(repo.full_name, 'main', 'BRANCHING_GUIDE.md', branchingGuideContent, 'Add branching guide');
-      logger.info('BRANCHING_GUIDE.md created');
-
-      // 8. Apply branch protection rules
-      await githubService.protectBranch(repo.full_name, 'main', {
-        requirePullRequest: true,
-        requiredApprovals: 1
-      });
-      logger.info('Branch protection applied to main');
-
-      await githubService.protectBranch(repo.full_name, 'dev', {
-        requirePullRequest: true,
-        requiredApprovals: 1
-      });
-      logger.info('Branch protection applied to dev');
-
-      // 9. Add collaborators
-      for (const member of teamMembers) {
-        await githubService.addCollaborator(repo.full_name, member, 'push');
-        logger.info(`Collaborator added: ${member}`);
-      }
-
-      // 10. Add team members to project in database
-      for (const member of teamMembers) {
-        // Try to find user by email or create a placeholder
-        const user = await UserModel.getByEmail(member) || await UserModel.create({
-          name: member,
-          email: member,
-          role: 'developer',
-          password: 'temp123' // Should be updated later
+    // 3. Optionally create GitHub repository
+    let githubData = null;
+    let githubWarning = null;
+    if (create_github_repo) {
+      try {
+        githubData = await githubService.createRepo({
+          name: name.toLowerCase().replace(/\s+/g, '-'),
+          description: description || `ProjectPulse: ${name}`,
+          private: github_repo_private || false
         });
-        
-        await UserModel.addToProject(user.id, project.id, 'member');
+        await client.query(
+          `INSERT INTO github_mapping (project_id, repo_name, repo_url, repo_full_name, is_private)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [project.id, githubData.name, githubData.html_url, githubData.full_name, githubData.private]
+        );
+        logger.info(`GitHub repo created: ${githubData.full_name}`);
+      } catch (githubError) {
+        githubWarning = githubError.message;
+        logger.warn(`GitHub repo creation failed (non-blocking): ${githubError.message}`);
       }
-
-      logger.info(`Project creation completed: ${repo.html_url}`);
-
-      return res.status(201).json({
-        success: true,
- projectId: project.id,
-        repoUrl: repo.html_url,
-        repoName: repo.name,
-        message: 'Repository created successfully with all configurations'
-      });
-
-    } catch (githubError) {
-      // If GitHub operations fail, clean up the database entry
-      logger.error('GitHub operations failed, cleaning up database:', githubError);
-      await ProjectModel.delete(project.id);
-      throw githubError;
-    }
-    */
-
-    // Add team members to project in database
-    for (const member of teamMembers || []) {
-      // Try to find user by email or create a placeholder
-      const user = await UserModel.getByEmail(member) || await UserModel.create({
-        name: member,
-        email: member,
-        role: 'developer',
-        password: 'temp123' // Should be updated later
-      });
-      
-      await UserModel.addToProject(user.id, project.id, 'member');
     }
 
-    return res.status(201).json({
+    // 4. Send to managers for acceptance
+    if (manager_ids && manager_ids.length > 0) {
+      for (const managerId of manager_ids) {
+        await client.query(
+          `INSERT INTO project_managers (project_id, manager_id) VALUES ($1, $2)
+           ON CONFLICT (project_id, manager_id) DO NOTHING`,
+          [project.id, managerId]
+        );
+        // Create notification for each manager
+        await client.query(
+          `INSERT INTO notifications (user_id, title, message, type, link)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [managerId, 'New Project Assignment', `You have been assigned to review project "${name}"`, 'info', `/projects/${project.id}`]
+        );
+      }
+    }
+
+    // Log activity
+    await client.query(
+      `INSERT INTO activity_log (user_id, project_id, action, entity_type, entity_id, details)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [req.user.id, project.id, 'created', 'project', project.id, JSON.stringify({ jira: jiraData?.key, github: githubData?.full_name })]
+    );
+
+    await client.query('COMMIT');
+
+    const warnings = [];
+    if (jiraWarning) warnings.push(`Jira: ${jiraWarning}`);
+    if (githubWarning) warnings.push(`GitHub: ${githubWarning}`);
+
+    res.status(201).json({
       success: true,
-      projectId: project.id,
-      message: 'Project created successfully in database'
+      message: warnings.length > 0
+        ? `Project created, but some integrations failed: ${warnings.join('; ')}`
+        : 'Project created successfully',
+      warnings,
+      project: {
+        ...project,
+        jira: jiraData ? { key: jiraData.key, id: jiraData.id } : null,
+        github: githubData ? { url: githubData.html_url, name: githubData.name } : null
+      }
     });
-
   } catch (error) {
-    logger.error('Error creating project:', error);
+    await client.query('ROLLBACK');
     next(error);
+  } finally {
+    client.release();
   }
 };
 
-const generateReadme = (projectName, description, projectKey, teamLeader, teamMembers) => {
-  return `# ${projectName}
-
-**Project Key:** ${projectKey}  
-**Description:** ${description}
-
-## 👥 Team
-
-**Team Leader:** @${teamLeader}
-
-**Team Members:**
-${teamMembers.map(member => `- @${member}`).join('\n')}
-
-## 🌿 Branching Strategy
-
-This project follows a structured branching workflow. See [BRANCHING_GUIDE.md](./BRANCHING_GUIDE.md) for details.
-
-## 🚀 Getting Started
-
-1. Clone the repository
-2. Checkout your feature branch: \`git checkout feature/<your-username>\`
-3. Make your changes
-4. Create a pull request to \`dev\` branch
-
-## 📋 Project Status
-
-Track project progress in JIRA using project key: **${projectKey}**
-
----
-
-*This repository was automatically created by ProjectPulse AI* 🤖
-`;
-};
-
-const generateBranchingGuide = () => {
-  return `# Branching Guide
-
-This document explains our branching strategy and workflow.
-
-## 🌳 Branch Structure
-
-### \`main\` → Production
-- **Purpose:** Production-ready code
-- **Protection:** Requires pull request + 1 approval
-- **Deployment:** Auto-deploys to production environment
-
-### \`dev\` → Integration
-- **Purpose:** Development integration branch
-- **Protection:** Requires pull request + 1 approval
-- **Usage:** Merge feature branches here for testing
-
-### \`staging\` → Testing
-- **Purpose:** Pre-production testing
-- **Usage:** Deploy to staging environment for QA
-
-### \`prod\` → Release
-- **Purpose:** Production release management
-- **Usage:** Tag releases and manage deployments
-
-### \`feature/<username>\` → Individual Development
-- **Purpose:** Personal development workspace
-- **Pattern:** \`feature/johndoe\`, \`feature/janesmith\`
-- **Usage:** Each team member works on their own feature branch
-
-## 🔄 Workflow
-
-1. **Start Work**
-   \`\`\`bash
-   git checkout feature/<your-username>
-   git pull origin dev
-   \`\`\`
-
-2. **Make Changes**
-   - Commit regularly with meaningful messages
-   - Push to your feature branch
-
-3. **Create Pull Request**
-   - From \`feature/<your-username>\` to \`dev\`
-   - Request review from team leader
-   - Address feedback
-
-4. **Merge to Dev**
-   - After approval, merge to \`dev\`
-   - Test in development environment
-
-5. **Deploy to Staging**
-   - Create PR from \`dev\` to \`staging\`
-   - QA testing
-
-6. **Release to Production**
-   - Create PR from \`staging\` to \`main\`
-   - Final review and deployment
-
-## 📝 Commit Message Convention
-
-- \`feat:\` New feature
-- \`fix:\` Bug fix
-- \`docs:\` Documentation changes
-- \`style:\` Code style changes
-- \`refactor:\` Code refactoring
-- \`test:\` Test changes
-- \`chore:\` Build/tool changes
-
-## 🛡️ Branch Protection Rules
-
-All protected branches require:
-- Pull request review
-- At least 1 approval
-- No direct pushes
-
----
-
-*Questions? Contact your team leader.* 👨‍💼👩‍💼
-`;
-};
-
-// Get all projects
-export const getAllProjects = async (req, res, next) => {
+// GET /api/projects - Get projects based on user role
+export const getProjects = async (req, res, next) => {
   try {
-    const projects = await ProjectModel.getAll();
-    return res.status(200).json({
+    const { role, id } = req.user;
+    const userId = parseInt(id);
+    let query, params;
+
+    switch (role) {
+      case 'hr':
+        // HR sees all projects
+        query = `
+          SELECT p.*, u.name as creator_name,
+            (SELECT json_agg(json_build_object('id', gm.id, 'repo_url', gm.repo_url, 'repo_name', gm.repo_name))
+             FROM github_mapping gm WHERE gm.project_id = p.id) as github_repos,
+            (SELECT json_agg(json_build_object('id', jm.id, 'jira_key', jm.jira_project_key))
+             FROM jira_mapping jm WHERE jm.project_id = p.id AND jm.task_id IS NULL) as jira_info
+          FROM projects p
+          LEFT JOIN users u ON p.created_by = u.id
+          ORDER BY p.created_at DESC`;
+        params = [];
+        break;
+
+      case 'manager':
+        // Managers see projects assigned to them
+        query = `
+          SELECT p.*, u.name as creator_name, pm.status as manager_status,
+            (SELECT json_agg(json_build_object('id', gm.id, 'repo_url', gm.repo_url, 'repo_name', gm.repo_name))
+             FROM github_mapping gm WHERE gm.project_id = p.id) as github_repos,
+            (SELECT json_agg(json_build_object('id', jm.id, 'jira_key', jm.jira_project_key))
+             FROM jira_mapping jm WHERE jm.project_id = p.id AND jm.task_id IS NULL) as jira_info
+          FROM projects p
+          JOIN project_managers pm ON p.id = pm.project_id AND pm.manager_id = $1
+          LEFT JOIN users u ON p.created_by = u.id
+          ORDER BY p.created_at DESC`;
+        params = [userId];
+        break;
+
+      case 'team_leader':
+        // Team leaders see projects where they have scopes
+        query = `
+          SELECT DISTINCT p.*, u.name as creator_name
+          FROM projects p
+          JOIN scopes s ON p.id = s.project_id AND s.team_leader_id = $1
+          LEFT JOIN users u ON p.created_by = u.id
+          ORDER BY p.created_at DESC`;
+        params = [userId];
+        break;
+
+      case 'developer':
+        // Developers see projects where they have tasks
+        query = `
+          SELECT DISTINCT p.*, u.name as creator_name
+          FROM projects p
+          JOIN tasks t ON p.id = t.project_id AND t.assigned_to = $1
+          LEFT JOIN users u ON p.created_by = u.id
+          ORDER BY p.created_at DESC`;
+        params = [userId];
+        break;
+
+      default:
+        return res.status(403).json({ success: false, message: 'Invalid role' });
+    }
+
+    const result = await pool.query(query, params);
+
+    res.json({
       success: true,
-      data: projects,
-      count: projects.length
+      projects: result.rows
     });
   } catch (error) {
-    logger.error('Error fetching projects:', error);
     next(error);
   }
 };
 
-// Get project by ID
+// GET /api/projects/:id
 export const getProjectById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const project = await ProjectModel.getById(id);
-    
-    if (!project) {
-      return res.status(404).json({
-        success: false,
-        message: 'Project not found'
-      });
+
+    const projectResult = await pool.query(
+      `SELECT p.*, u.name as creator_name FROM projects p
+       LEFT JOIN users u ON p.created_by = u.id WHERE p.id = $1`,
+      [id]
+    );
+
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
     }
 
-    // Get project tasks
-    const tasks = await TaskModel.getByProject(id);
-    
-    return res.status(200).json({
+    const project = projectResult.rows[0];
+
+    // Get managers
+    const managers = await pool.query(
+      `SELECT pm.*, u.name, u.email FROM project_managers pm
+       JOIN users u ON pm.manager_id = u.id WHERE pm.project_id = $1`,
+      [id]
+    );
+
+    // Get scopes
+    const scopes = await pool.query(
+      `SELECT s.*, u.name as team_leader_name FROM scopes s
+       JOIN users u ON s.team_leader_id = u.id WHERE s.project_id = $1`,
+      [id]
+    );
+
+    // Get tasks summary
+    const tasksSummary = await pool.query(
+      `SELECT status, COUNT(*) as count FROM tasks WHERE project_id = $1 GROUP BY status`,
+      [id]
+    );
+
+    // Get integrations
+    const github = await pool.query('SELECT * FROM github_mapping WHERE project_id = $1', [id]);
+    const jira = await pool.query('SELECT * FROM jira_mapping WHERE project_id = $1 AND task_id IS NULL', [id]);
+
+    // Get latest analytics
+    const analytics = await pool.query(
+      `SELECT metric_type, metric_value, confidence, computed_at
+       FROM analytics_metrics WHERE project_id = $1
+       ORDER BY computed_at DESC LIMIT 10`,
+      [id]
+    );
+
+    res.json({
       success: true,
-      data: {
+      project: {
         ...project,
-        tasks
+        managers: managers.rows,
+        scopes: scopes.rows,
+        tasks_summary: tasksSummary.rows,
+        github: github.rows[0] || null,
+        jira: jira.rows[0] || null,
+        analytics: analytics.rows
       }
     });
   } catch (error) {
-    logger.error('Error fetching project:', error);
     next(error);
   }
 };
 
-// Update project
+// PUT /api/projects/:id
 export const updateProject = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
-    
-    const project = await ProjectModel.update(id, updateData);
-    
-    if (!project) {
-      return res.status(404).json({
-        success: false,
-        message: 'Project not found'
-      });
+    const updates = req.body;
+
+    const fields = [];
+    const values = [];
+    let idx = 1;
+
+    const allowedFields = ['name', 'description', 'status', 'priority', 'progress', 'deadline', 'budget'];
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields.includes(key)) {
+        fields.push(`${key} = $${idx}`);
+        values.push(value);
+        idx++;
+      }
     }
 
-    return res.status(200).json({
-      success: true,
-      data: project,
-      message: 'Project updated successfully'
-    });
+    if (fields.length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid fields to update' });
+    }
+
+    fields.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id);
+
+    const result = await pool.query(
+      `UPDATE projects SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
+      values
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+
+    res.json({ success: true, project: result.rows[0] });
   } catch (error) {
-    logger.error('Error updating project:', error);
     next(error);
   }
 };
 
-// Delete project
-export const deleteProject = async (req, res, next) => {
+// POST /api/projects/:id/accept - Manager accepts project
+export const acceptProject = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const project = await ProjectModel.delete(id);
-    
-    if (!project) {
-      return res.status(404).json({
-        success: false,
-        message: 'Project not found'
-      });
+    const managerId = req.user.id;
+
+    const result = await pool.query(
+      `UPDATE project_managers SET status = 'accepted', accepted_at = CURRENT_TIMESTAMP
+       WHERE project_id = $1 AND manager_id = $2 AND status = 'pending'
+       RETURNING *`,
+      [id, managerId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Project assignment not found or already processed' });
     }
 
-    return res.status(200).json({
-      success: true,
-      data: project,
-      message: 'Project deleted successfully'
-    });
+    // Update project status to active if at least one manager accepted
+    await pool.query(
+      `UPDATE projects SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'pending'`,
+      [id]
+    );
+
+    // Log activity
+    await pool.query(
+      `INSERT INTO activity_log (user_id, project_id, action, entity_type, entity_id)
+       VALUES ($1, $2, 'accepted', 'project', $2)`,
+      [managerId, id]
+    );
+
+    res.json({ success: true, message: 'Project accepted successfully' });
   } catch (error) {
-    logger.error('Error deleting project:', error);
     next(error);
   }
 };
 
-// Create task for project
-export const createTask = async (req, res, next) => {
+// POST /api/projects/:id/decline - Manager declines project
+export const declineProject = async (req, res, next) => {
   try {
-    const { projectId } = req.params;
-    const taskData = {
-      ...req.body,
-      project_id: projectId
-    };
-    
-    const task = await TaskModel.create(taskData);
-    
-    return res.status(201).json({
-      success: true,
-      data: task,
-      message: 'Task created successfully'
-    });
+    const { id } = req.params;
+    const managerId = req.user.id;
+
+    const result = await pool.query(
+      `UPDATE project_managers SET status = 'declined'
+       WHERE project_id = $1 AND manager_id = $2 AND status = 'pending'
+       RETURNING *`,
+      [id, managerId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Project assignment not found or already processed' });
+    }
+
+    res.json({ success: true, message: 'Project declined' });
   } catch (error) {
-    logger.error('Error creating task:', error);
     next(error);
   }
 };
 
-// Get tasks for project
-export const getProjectTasks = async (req, res, next) => {
-  try {
-    const { projectId } = req.params;
-    const tasks = await TaskModel.getByProject(projectId);
-    
-    return res.status(200).json({
-      success: true,
-      data: tasks,
-      count: tasks.length
-    });
-  } catch (error) {
-    logger.error('Error fetching tasks:', error);
-    next(error);
-  }
-};
-
-// Get project statistics
+// GET /api/projects/stats
 export const getProjectStats = async (req, res, next) => {
   try {
-    const stats = await ProjectModel.getStatistics();
-    
-    return res.status(200).json({
+    const result = await pool.query(`
+      SELECT 
+        COUNT(*) as total_projects,
+        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_projects,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_projects,
+        COUNT(CASE WHEN status = 'at_risk' THEN 1 END) as at_risk_projects,
+        COUNT(CASE WHEN status = 'delayed' THEN 1 END) as delayed_projects,
+        COALESCE(AVG(progress), 0) as avg_progress
+      FROM projects
+    `);
+
+    const taskStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_tasks,
+        COUNT(CASE WHEN status = 'done' THEN 1 END) as completed_tasks,
+        COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_tasks,
+        COUNT(CASE WHEN status = 'blocked' THEN 1 END) as blocked_tasks
+      FROM tasks
+    `);
+
+    res.json({
       success: true,
-      data: stats
+      stats: {
+        projects: result.rows[0],
+        tasks: taskStats.rows[0]
+      }
     });
   } catch (error) {
-    logger.error('Error fetching project statistics:', error);
     next(error);
   }
 };

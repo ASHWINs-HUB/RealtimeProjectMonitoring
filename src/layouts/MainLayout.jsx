@@ -1,207 +1,294 @@
-import React, { useState } from 'react'
-import { Outlet, Link, useLocation } from 'react-router-dom'
-import { useAuthStore } from '@/store/authStore'
-import { Button } from '@/components/ui/Button'
-import { 
-  Menu, 
-  X, 
-  Home, 
-  FolderKanban, 
-  BarChart3, 
-  Users, 
-  Settings, 
-  LogOut,
-  Github,
-  Target,
-  TrendingUp,
-  CheckSquare
-} from 'lucide-react'
+import React, { useState, useEffect } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuthStore } from '@/store/authStore';
+import { useNotificationStore } from '@/store/notificationStore';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Menu, X, Home, FolderKanban, BarChart3, Users, LogOut,
+  Target, TrendingUp, CheckSquare, Bell, ChevronDown,
+  Lightbulb, UserCheck, ClipboardList, Award, Settings,
+  GitBranch, Zap
+} from 'lucide-react';
 
-export const MainLayout = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { user, logout } = useAuthStore()
-  const location = useLocation()
+// Role-based navigation configuration
+const ROLE_NAV = {
+  hr: [
+    { path: '/dashboard', label: 'Dashboard', icon: Home },
+    { path: '/projects', label: 'Projects', icon: FolderKanban },
+    { path: '/analytics', label: 'Analytics', icon: BarChart3 },
+    { path: '/insights', label: 'Insights', icon: Lightbulb },
+  ],
+  manager: [
+    { path: '/dashboard', label: 'Dashboard', icon: Home },
+    { path: '/projects', label: 'Projects', icon: FolderKanban },
+    { path: '/team', label: 'Team', icon: Users },
+    { path: '/analytics', label: 'Analytics', icon: BarChart3 },
+    { path: '/insights', label: 'Insights', icon: Lightbulb },
+  ],
+  team_leader: [
+    { path: '/dashboard', label: 'Dashboard', icon: Home },
+    { path: '/projects', label: 'Projects', icon: FolderKanban },
+    { path: '/team-analytics', label: 'Team Analytics', icon: BarChart3 },
+    { path: '/team-members', label: 'Team Members', icon: Users },
+  ],
+  developer: [
+    { path: '/dashboard', label: 'Dashboard', icon: Home },
+    { path: '/tasks', label: 'Assigned Tasks', icon: CheckSquare },
+    { path: '/my-score', label: 'My Score', icon: Award },
+  ]
+};
 
-  const getNavigationItems = () => {
-    const items = []
+export const MainLayout = ({ children }) => {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { user, logout } = useAuthStore();
+  const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead } = useNotificationStore();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-    if (user?.role === 'hr') {
-      items.push(
-        { path: '/dashboard', label: 'Dashboard', icon: Home },
-        { path: '/projects', label: 'Projects', icon: FolderKanban },
-        { path: '/analytics', label: 'Analytics', icon: BarChart3 },
-        { path: '/insights', label: 'Insights', icon: TrendingUp },
-        { path: '/integrations/github', label: 'GitHub', icon: Github },
-        { path: '/integrations/jira', label: 'Jira', icon: Target }
-      )
-    }
+  const navItems = ROLE_NAV[user?.role] || [];
 
-    if (user?.role === 'manager') {
-      items.push(
-        { path: '/manager/dashboard', label: 'Dashboard', icon: Home },
-        { path: '/projects', label: 'Projects', icon: FolderKanban },
-        { path: '/team', label: 'Team', icon: Users },
-        { path: '/manager/analytics', label: 'Analytics', icon: BarChart3 },
-        { path: '/manager/insights', label: 'Insights', icon: TrendingUp },
-        { path: '/integrations/github', label: 'GitHub', icon: Github },
-        { path: '/integrations/jira', label: 'Jira', icon: Target }
-      )
-    }
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-    if (user?.role === 'team_leader') {
-      items.push(
-        { path: '/team-leader/dashboard', label: 'Dashboard', icon: Home },
-        { path: '/projects', label: 'Projects', icon: FolderKanban },
-        { path: '/team', label: 'Team', icon: Users },
-        { path: '/team-leader/analytics', label: 'Team Analytics', icon: BarChart3 },
-        { path: '/team-leader/insights', label: 'Insights', icon: TrendingUp },
-        { path: '/team-members', label: 'Team Members', icon: Users }
-      )
-    }
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
-    if (user?.role === 'developer') {
-      items.push(
-        { path: '/developer/dashboard', label: 'Dashboard', icon: Home },
-        { path: '/tasks/assigned', label: 'Tasks Assigned', icon: CheckSquare },
-        { path: '/tasks/management', label: 'Task Management', icon: Settings }
-      )
-    }
+  const roleLabels = {
+    hr: 'HR Admin',
+    manager: 'Manager',
+    team_leader: 'Team Leader',
+    developer: 'Developer'
+  };
 
-    return items
-  }
-
-  const navigationItems = getNavigationItems()
+  const roleColors = {
+    hr: 'from-violet-500 to-purple-600',
+    manager: 'from-blue-500 to-indigo-600',
+    team_leader: 'from-teal-500 to-cyan-600',
+    developer: 'from-orange-500 to-amber-600'
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
       {/* Mobile sidebar backdrop */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Header - spans full width */}
-      <header className="sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
-          >
-            <Menu size={20} />
-          </button>
-          
-          <div className="flex items-center space-x-4">
-            <div className="hidden sm:block">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {navigationItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
-              </h2>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-4">
-            {/* Notifications */}
-            <button className="relative p-2 rounded-lg hover:bg-gray-100">
-              <div className="w-2 h-2 bg-red-500 rounded-full absolute top-2 right-2"></div>
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </header>
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Sidebar */}
       <aside className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0
+        fixed inset-y-0 left-0 z-50 w-[280px] bg-white border-r border-gray-200
+        transform transition-transform duration-300 ease-in-out
+        lg:translate-x-0 lg:static lg:inset-auto
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">P</span>
+          {/* Brand */}
+          <div className="p-5 border-b border-gray-100">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 bg-gradient-to-br ${roleColors[user?.role] || 'from-indigo-500 to-purple-600'} rounded-xl flex items-center justify-center shadow-lg`}>
+                  <Zap size={20} className="text-white" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+                    ProjectPulse
+                  </h1>
+                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">AI Platform</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">ProjectPulse</h1>
-                <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
-              </div>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X size={18} className="text-gray-500" />
+              </button>
             </div>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
-            >
-              <X size={20} />
-            </button>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2">
-            {navigationItems.map((item) => {
-              const Icon = item.icon
-              const isActive = location.pathname === item.path
-              
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`
-                    flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200
-                    ${isActive 
-                      ? 'bg-indigo-50 text-indigo-600 border-l-4 border-indigo-600' 
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                    }
-                  `}
-                >
-                  <Icon size={20} />
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              )
-            })}
+          <nav className="flex-1 p-3 overflow-y-auto">
+            <p className="px-3 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+              Navigation
+            </p>
+            <ul className="space-y-1">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname === item.path
+                  || (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
+
+                return (
+                  <li key={item.path}>
+                    <Link
+                      to={item.path}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`
+                        flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                        ${isActive
+                          ? 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 shadow-sm'
+                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        }
+                      `}
+                    >
+                      <div className={`
+                        w-8 h-8 rounded-lg flex items-center justify-center transition-colors
+                        ${isActive ? 'bg-indigo-100' : 'bg-gray-100 group-hover:bg-gray-200'}
+                      `}>
+                        <Icon size={16} className={isActive ? 'text-indigo-600' : 'text-gray-500'} />
+                      </div>
+                      <span>{item.label}</span>
+                      {isActive && (
+                        <motion.div
+                          layoutId="active-indicator"
+                          className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500"
+                        />
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           </nav>
 
           {/* User section */}
-          <div className="p-4 border-t border-gray-200">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                <span className="text-gray-600 font-medium">
-                  {user?.name?.charAt(0)?.toUpperCase()}
+          <div className="p-4 border-t border-gray-100">
+            <div className="flex items-center gap-3 mb-3">
+              <div className={`w-10 h-10 bg-gradient-to-br ${roleColors[user?.role] || 'from-gray-400 to-gray-500'} rounded-full flex items-center justify-center shadow-inner`}>
+                <span className="text-white font-semibold text-sm">
+                  {user?.name?.[0]?.toUpperCase() || '?'}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {user?.name}
-                </p>
-                <p className="text-xs text-gray-500 truncate">
-                  {user?.email}
-                </p>
+                <p className="text-sm font-semibold text-gray-900 truncate">{user?.name}</p>
+                <p className="text-xs text-gray-500">{roleLabels[user?.role]}</p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={logout}
-              className="w-full justify-start"
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors"
             >
-              <LogOut size={16} className="mr-2" />
-              Logout
-            </Button>
+              <LogOut size={16} />
+              Sign Out
+            </button>
           </div>
         </div>
       </aside>
 
-      {/* Main content */}
-      <div className="lg:ml-64">
+      {/* Main content area */}
+      <div className="lg:ml-0 flex-1 flex flex-col min-h-screen">
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-gray-200/80 px-4 py-3 sm:px-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="lg:hidden p-2 rounded-xl hover:bg-gray-100 transition-colors"
+                id="sidebar-toggle"
+              >
+                <Menu size={20} className="text-gray-600" />
+              </button>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {navItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
+                </h2>
+                <p className="text-xs text-gray-500 hidden sm:block">
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Notification bell */}
+              <div className="relative">
+                <button
+                  onClick={() => setNotifOpen(!notifOpen)}
+                  className="relative p-2 rounded-xl hover:bg-gray-100 transition-colors"
+                  id="notification-bell"
+                >
+                  <Bell size={20} className="text-gray-600" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Notification dropdown */}
+                <AnimatePresence>
+                  {notifOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                      className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden z-50"
+                    >
+                      <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-900">Notifications</h3>
+                        {unreadCount > 0 && (
+                          <button
+                            onClick={() => { markAllAsRead(); }}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                          >
+                            Mark all read
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-80 overflow-y-auto">
+                        {notifications.length === 0 ? (
+                          <div className="p-8 text-center text-gray-400">
+                            <Bell size={32} className="mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">No notifications yet</p>
+                          </div>
+                        ) : (
+                          notifications.slice(0, 10).map(notif => (
+                            <div
+                              key={notif.id}
+                              className={`p-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors
+                                ${!notif.is_read ? 'bg-indigo-50/50' : ''}
+                              `}
+                              onClick={() => {
+                                markAsRead(notif.id);
+                                if (notif.link) navigate(notif.link);
+                                setNotifOpen(false);
+                              }}
+                            >
+                              <p className="text-sm font-medium text-gray-900">{notif.title}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{notif.message}</p>
+                              <p className="text-[10px] text-gray-400 mt-1">
+                                {new Date(notif.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+        </header>
+
         {/* Page content */}
-        <main className="p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto">
-            <Outlet />
+            {children || <Outlet />}
           </div>
         </main>
       </div>
     </div>
-  )
-}
+  );
+};
