@@ -3,7 +3,7 @@ import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 import { validateCreateProject, validateCreateTask, validateUpdateTaskStatus, validateCreateScope } from '../middleware/validation.js';
 import {
   createProject, getProjects, getProjectById, updateProject,
-  acceptProject, declineProject, getProjectStats
+  acceptProject, declineProject, getProjectStats, approveProject, rejectProject
 } from '../controllers/projectController.js';
 import {
   createScope, getScopes, createTask, getAssignedTasks,
@@ -18,30 +18,34 @@ const router = Router();
 router.use(authenticateToken);
 
 // ============ PROJECT ROUTES ============
-router.post('/projects', authorizeRoles('hr'), validateCreateProject, createProject);
+router.post('/projects', authorizeRoles('hr', 'stakeholder', 'admin'), validateCreateProject, createProject);
 router.get('/projects', getProjects);
-router.get('/projects/stats', authorizeRoles('hr', 'manager'), getProjectStats);
+router.get('/projects/stats', authorizeRoles('hr', 'admin'), getProjectStats);
 router.get('/projects/:id', getProjectById);
-router.put('/projects/:id', authorizeRoles('hr', 'manager'), updateProject);
+router.put('/projects/:id', authorizeRoles('hr', 'manager', 'admin'), updateProject);
 
 // Manager accept/decline
 router.post('/projects/:id/accept', authorizeRoles('manager'), acceptProject);
 router.post('/projects/:id/decline', authorizeRoles('manager'), declineProject);
 
+// HR / Admin approve/reject proposals
+router.post('/projects/:id/approve', authorizeRoles('hr', 'admin'), approveProject);
+router.post('/projects/:id/reject', authorizeRoles('hr', 'admin'), rejectProject);
+
 // ============ SCOPE ROUTES ============
-router.post('/projects/:projectId/scopes', authorizeRoles('manager'), validateCreateScope, createScope);
-router.get('/projects/:projectId/scopes', authorizeRoles('hr', 'manager', 'team_leader', 'developer'), getScopes);
+router.post('/projects/:projectId/scopes', authorizeRoles('manager', 'admin'), validateCreateScope, createScope);
+router.get('/projects/:projectId/scopes', authorizeRoles('hr', 'manager', 'team_leader', 'developer', 'admin', 'stakeholder'), getScopes);
 
 // ============ TASK ROUTES ============
-router.post('/projects/:projectId/tasks', authorizeRoles('team_leader'), validateCreateTask, createTask);
+router.post('/projects/:projectId/tasks', authorizeRoles('team_leader', 'admin'), validateCreateTask, createTask);
 router.get('/projects/:projectId/tasks', getProjectTasks);
-router.get('/tasks/assigned', authorizeRoles('developer', 'team_leader'), getAssignedTasks);
-router.put('/tasks/:taskId/status', authorizeRoles('developer', 'team_leader'), validateUpdateTaskStatus, updateTaskStatus);
-router.post('/tasks/:taskId/create-branch', authorizeRoles('developer', 'team_leader'), createTaskBranch);
+router.get('/tasks/assigned', authorizeRoles('developer', 'team_leader', 'admin'), getAssignedTasks);
+router.put('/tasks/:taskId/status', authorizeRoles('developer', 'team_leader', 'admin'), validateUpdateTaskStatus, updateTaskStatus);
+router.post('/tasks/:taskId/create-branch', authorizeRoles('developer', 'team_leader', 'admin'), createTaskBranch);
 
 // ============ TEAM ROUTES ============
 router.get('/teams', getTeams);
-router.post('/teams', authorizeRoles('team_leader'), createTeam);
+router.post('/teams', authorizeRoles('team_leader', 'admin'), createTeam);
 
 // ============ NOTIFICATION ROUTES ============
 router.get('/notifications', getNotifications);

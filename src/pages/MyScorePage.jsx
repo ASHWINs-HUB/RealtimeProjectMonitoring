@@ -44,7 +44,7 @@ export const MyScorePage = () => {
         <div className="max-w-5xl mx-auto space-y-8">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-8">
                 <div>
-                    <h1 className="text-3xl font-black text-gray-900">Developer Impact Score</h1>
+                    <h1 className="text-3xl font-black text-gray-900">Developer Analytics</h1>
                     <p className="text-gray-500 mt-2 text-lg">Machine-authenticated performance and reliability metrics.</p>
                 </div>
                 <button

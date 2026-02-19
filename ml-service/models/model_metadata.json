@@ -1,0 +1,27 @@
+{
+  "trained_at": "2026-02-19T15:42:24.156086",
+  "n_samples": 5000,
+  "n_features": 12,
+  "features": [
+    "commit_frequency",
+    "pr_review_time_hrs",
+    "pr_rejection_ratio",
+    "issue_completion_days",
+    "reopened_issues_ratio",
+    "sprint_delay_pct",
+    "overdue_task_ratio",
+    "blocked_task_ratio",
+    "team_size",
+    "days_remaining_ratio",
+    "effort_ratio",
+    "inactive_contributors_ratio"
+  ],
+  "classes": [
+    "high",
+    "low",
+    "medium"
+  ],
+  "model_type": "XGBoost",
+  "classifier_cv_accuracy": 0.868,
+  "regressor_r2": 0.9061710351644572
+}

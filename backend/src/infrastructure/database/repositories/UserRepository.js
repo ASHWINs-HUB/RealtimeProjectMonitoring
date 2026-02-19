@@ -49,6 +49,12 @@ export class UserRepository {
         const result = await pool.query(query, params);
         return result.rows;
     }
+    async updateRole(userId, role) {
+        return pool.query(
+            'UPDATE users SET role = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, name, email, role',
+            [role, userId]
+        );
+    }
 }
 
 export const userRepository = new UserRepository();

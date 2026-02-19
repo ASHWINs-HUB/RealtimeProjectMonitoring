@@ -41,6 +41,7 @@ export class SecurityDomain {
             MANAGER: 'manager',
             TEAM_LEADER: 'team_leader',
             DEVELOPER: 'developer',
+            STAKEHOLDER: 'stakeholder',
             QA: 'qa',
             DEVOPS: 'devops'
         };

@@ -25,6 +25,7 @@ import analyticsRoutes from './src/routes/analyticsRoutes.js';
 import { mlAnalytics } from './src/services/mlAnalytics.js';
 import { analyticsService } from './src/application/services/AnalyticsService.js';
 import { syncOrchestrator } from './src/application/services/SyncOrchestrator.js';
+import { escalationService } from './src/services/escalationService.js';
 
 const app = express();
 const server = createServer(app);
@@ -154,6 +155,18 @@ const startServer = async () => {
       }
     });
 
+    // Risk Recalculation + Escalation (Every 15 minutes)
+    cron.schedule('*/15 * * * *', async () => {
+      try {
+        logger.info('⏰ 15-min risk recalculation cycle starting...');
+        await mlAnalytics.computeAllMetrics();
+        await escalationService.runEscalationCheck();
+        logger.info('⏰ 15-min risk recalculation + escalation complete.');
+      } catch (e) {
+        logger.error('Scheduled risk recalculation failed:', e);
+      }
+    });
+
     // Start server
     server.listen(config.port, '0.0.0.0', () => {
       logger.info(`🚀 ProjectPulse API v2.0.0 running on port ${config.port}`);
@@ -161,6 +174,25 @@ const startServer = async () => {
       logger.info(`🤖 ML Cron: ${config.ml.retrainCron}`);
       logger.info(`🌍 Environment: ${config.nodeEnv}`);
     });
+
+    // Graceful shutdown handling
+    const gracefulShutdown = (signal) => {
+      logger.info(`Received ${signal}. Shutting down gracefully...`);
+      server.close(() => {
+        logger.info('HTTP server closed');
+        process.exit(0);
+      });
+
+      // Force shutdown after 10 seconds if graceful close fails
+      setTimeout(() => {
+        logger.error('Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+      }, 10000);
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);

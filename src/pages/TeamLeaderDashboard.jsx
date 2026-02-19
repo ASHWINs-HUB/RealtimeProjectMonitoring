@@ -2,73 +2,55 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/ui/Toast';
 import api from '@/services/api';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { RiskAlertBanner, RiskScoreGauge } from '@/components/ui/RiskAlerts';
 import {
-  ListChecks, Users, Plus, X, Loader2, Calendar, Target,
-  CheckCircle2, Clock, BarChart2, Briefcase, Zap, GitPullRequest
+  Users, BarChart3, Clock, AlertTriangle, RefreshCw,
+  TrendingDown, Shield, Activity, GitPullRequest, Layers
 } from 'lucide-react';
 
+/**
+ * Team Leader Dashboard — Role-specific
+ * Shows ONLY team metrics:
+ * - Team sprint delay %
+ * - Average PR review time
+ * - Team commit health
+ * - Blocked issues
+ * - Team risk score
+ *
+ * Alerts: Warning > 45%, Danger > 65%
+ */
 export const TeamLeaderDashboard = () => {
   const { user } = useAuthStore();
   const toast = useToast();
-  const [scopes, setScopes] = useState([]);
-  const [developers, setDevelopers] = useState([]);
+  const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showTaskModal, setShowTaskModal] = useState(false);
-  const [selectedScope, setSelectedScope] = useState(null);
-  const [creatingTask, setCreatingTask] = useState(false);
-  const [newTask, setNewTask] = useState({
-    title: '', description: '', assigned_to: '', priority: 'medium',
-    story_points: 0, estimated_hours: 0, due_date: '', sync_jira: true
-  });
+  const [syncing, setSyncing] = useState(false);
+  const [dismissedAlerts, setDismissedAlerts] = useState([]);
 
   const fetchData = useCallback(async () => {
     try {
-      // First get all projects to find scopes across them
-      const projData = await api.getProjects();
-      const allProjects = projData.projects || [];
-
-      // Fetch scopes for each project (could be optimized, but works for now)
-      const scopesPromises = allProjects.map(p => api.getScopes(p.id));
-      const scopesResults = await Promise.all(scopesPromises);
-
-      // Filter scopes assigned to THIS team leader
-      const filteredScopes = scopesResults.flatMap(res => res.scopes || [])
-        .filter(s => s.team_leader_id === user.id);
-
-      const devData = await api.getUsers('developer');
-
-      setScopes(filteredScopes);
-      setDevelopers(devData.users || []);
-    } catch (error) {
+      const riskData = await api.getRoleRiskMetrics().catch(() => null);
+      setMetrics(riskData?.metrics || {});
+    } catch {
       toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
-  }, [user.id, toast]);
+  }, [toast]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleCreateTask = async (e) => {
-    e.preventDefault();
-    if (!selectedScope) return;
-    setCreatingTask(true);
+  const handleSync = async () => {
+    setSyncing(true);
     try {
-      await api.createTask(selectedScope.project_id, {
-        ...newTask,
-        scope_id: selectedScope.id
-      });
-      toast.success('Task created and assigned to developer');
-      setShowTaskModal(false);
-      setNewTask({
-        title: '', description: '', assigned_to: '', priority: 'medium',
-        story_points: 0, estimated_hours: 0, due_date: '', sync_jira: true
-      });
+      await api.triggerBatchCompute();
+      toast.success('Synchronized with Jira & GitHub');
       fetchData();
-    } catch (error) {
-      toast.error(error.message || 'Failed to create task');
+    } catch {
+      toast.error('Sync failed');
     } finally {
-      setCreatingTask(false);
+      setSyncing(false);
     }
   };
 
@@ -80,257 +62,166 @@ export const TeamLeaderDashboard = () => {
     );
   }
 
+  const teamRisk = metrics?.team_risk_score ?? 0;
+  const thresholds = metrics?.thresholds || { warning: 45, danger: 65 };
+  const alerts = (metrics?.alerts || []).filter((_, i) => !dismissedAlerts.includes(i));
+  const members = metrics?.team_members || [];
+  const sprintDelayPct = metrics?.sprint_delay_pct ?? 0;
+  const blockedIssues = metrics?.blocked_issues ?? 0;
+
+  const fadeIn = {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.4 },
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Team Leader Hub</h1>
-          <p className="text-gray-500 mt-1">Manage scopes and delegate tasks to developers</p>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Team Overview</h1>
+          <p className="text-gray-500 font-medium">Team performance, sprint health & risk monitoring</p>
         </div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+          {syncing ? 'Syncing...' : 'Refresh Data'}
+        </button>
+      </header>
+
+      {/* Risk Alerts */}
+      <RiskAlertBanner alerts={alerts} onDismiss={(i) => setDismissedAlerts(p => [...p, i])} />
+
+      {/* Top Stats Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Team Risk Score */}
+        <motion.div {...fadeIn} className="bg-gradient-to-br from-gray-900 to-indigo-950 p-6 rounded-[2rem] text-white shadow-2xl flex flex-col items-center justify-center">
+          <RiskScoreGauge score={teamRisk} label="Team Risk" size="lg" thresholds={thresholds} />
+          <span className={`mt-3 text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${metrics?.risk_level === 'danger' ? 'bg-red-500/20 text-red-300' :
+              metrics?.risk_level === 'warning' ? 'bg-amber-500/20 text-amber-300' :
+                'bg-emerald-500/20 text-emerald-300'
+            }`}>
+            {metrics?.risk_level === 'danger' ? 'High Risk' : metrics?.risk_level === 'warning' ? 'Moderate Risk' : 'On Track'}
+          </span>
+        </motion.div>
+
+        {/* Sprint Delay */}
+        <motion.div {...fadeIn} transition={{ delay: 0.1 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-orange-50 rounded-xl">
+              <TrendingDown size={20} className="text-orange-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sprint Delay</p>
+              <p className={`text-3xl font-black ${sprintDelayPct > 30 ? 'text-red-600' : sprintDelayPct > 15 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                {sprintDelayPct}%
+              </p>
+            </div>
+          </div>
+          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${sprintDelayPct > 30 ? 'bg-red-500' : sprintDelayPct > 15 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+              style={{ width: `${Math.min(sprintDelayPct, 100)}%` }} />
+          </div>
+        </motion.div>
+
+        {/* Blocked Issues */}
+        <motion.div {...fadeIn} transition={{ delay: 0.2 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-red-50 rounded-xl">
+              <AlertTriangle size={20} className="text-red-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Blocked Issues</p>
+              <p className="text-3xl font-black text-gray-900">{blockedIssues}</p>
+            </div>
+          </div>
+          <p className="text-[10px] font-bold text-gray-400">Requires immediate attention</p>
+        </motion.div>
+
+        {/* Team Size */}
+        <motion.div {...fadeIn} transition={{ delay: 0.3 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-indigo-50 rounded-xl">
+              <Users size={20} className="text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Team Members</p>
+              <p className="text-3xl font-black text-gray-900">{members.length}</p>
+            </div>
+          </div>
+          <p className="text-[10px] font-bold text-gray-400">Active contributors</p>
+        </motion.div>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
-            <Target size={24} />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Assigned Scopes</p>
-            <p className="text-2xl font-bold text-gray-900">{scopes.length}</p>
-          </div>
+      {/* Team Members Risk Table */}
+      <motion.div {...fadeIn} transition={{ delay: 0.4 }} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100 flex items-center gap-2">
+          <Shield size={18} className="text-indigo-600" />
+          <h3 className="font-black text-gray-900 text-sm uppercase tracking-widest">Team Member Risk Scores</h3>
         </div>
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
-            <ListChecks size={24} />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Total Tasks</p>
-            <p className="text-2xl font-bold text-gray-900">
-              {scopes.reduce((acc, s) => acc + parseInt(s.task_count || 0), 0)}
-            </p>
-          </div>
-        </div>
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center text-orange-600">
-            <Users size={24} />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Team Force</p>
-            <p className="text-2xl font-bold text-gray-900">{developers.length} Devs</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Scopes & Tasks */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-bold text-gray-900">My Active Scopes</h2>
-        {scopes.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-            <Briefcase size={40} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-500">No scopes assigned to you yet.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {scopes.map(scope => (
-              <motion.div
-                key={scope.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col"
-              >
-                <div className="p-5 flex-1">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold text-gray-900 text-lg">{scope.title}</h3>
-                    <div className="flex items-center gap-2 text-xs font-semibold text-gray-400">
-                      <Calendar size={14} />
-                      {new Date(scope.deadline).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-500 mb-4 line-clamp-2">{scope.description}</p>
-
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span className="text-gray-500">Execution Progress</span>
-                      <span className="text-indigo-600">
-                        {scope.task_count > 0 ? Math.round((scope.completed_tasks / scope.task_count) * 100) : 0}%
+        {members.length > 0 ? (
+          <table className="w-full text-left">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Member</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Performance</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Risk Score</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {members.map(m => {
+                const riskLevel = m.risk_score >= 60 ? 'danger' : m.risk_score >= 40 ? 'warning' : 'safe';
+                return (
+                  <tr key={m.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xs">
+                          {m.name?.charAt(0)}
+                        </div>
+                        <span className="font-bold text-gray-900">{m.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="font-black text-gray-900">{m.performance}%</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${riskLevel === 'danger' ? 'bg-red-500' :
+                              riskLevel === 'warning' ? 'bg-amber-500' : 'bg-emerald-500'
+                            }`} style={{ width: `${m.risk_score}%` }} />
+                        </div>
+                        <span className="text-xs font-black text-gray-700">{m.risk_score}%</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${riskLevel === 'danger' ? 'bg-red-50 text-red-600' :
+                          riskLevel === 'warning' ? 'bg-amber-50 text-amber-600' :
+                            'bg-emerald-50 text-emerald-600'
+                        }`}>
+                        {riskLevel === 'danger' ? 'HIGH RISK' : riskLevel === 'warning' ? 'MODERATE' : 'HEALTHY'}
                       </span>
-                    </div>
-                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-indigo-500 transition-all duration-500"
-                        style={{ width: `${scope.task_count > 0 ? (scope.completed_tasks / scope.task_count) * 100 : 0}%` }}
-                      />
-                    </div>
-                    <div className="flex gap-4 text-xs font-medium text-gray-500">
-                      <div className="flex items-center gap-1">
-                        <CheckCircle2 size={14} className="text-emerald-500" />
-                        {scope.completed_tasks} Done
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock size={14} className="text-amber-500" />
-                        {scope.task_count - scope.completed_tasks} Pending
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-gray-50/50 p-4 border-t border-gray-100 flex gap-2">
-                  <button
-                    onClick={() => { setSelectedScope(scope); setShowTaskModal(true); }}
-                    className="flex-1 py-2 bg-white border border-indigo-200 text-indigo-600 font-bold rounded-xl text-xs hover:bg-indigo-50 transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Plus size={14} /> New Task
-                  </button>
-                  <button className="flex-1 py-2 bg-white border border-gray-200 text-gray-600 font-bold rounded-xl text-xs hover:bg-gray-100 transition-colors">
-                    Manage Board
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <div className="p-12 text-center text-gray-400">
+            <Users size={32} className="mx-auto mb-3 opacity-40" />
+            <p className="font-bold">No team members found</p>
+            <p className="text-xs">Create a team and assign members to see risk metrics here.</p>
           </div>
         )}
-      </div>
-
-      {/* New Task Modal */}
-      <AnimatePresence>
-        {showTaskModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto"
-            >
-              <div className="p-6 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
-                <h2 className="text-xl font-bold text-gray-900">Create & Delegate Task</h2>
-                <button onClick={() => setShowTaskModal(false)} className="p-2 rounded-xl hover:bg-gray-100">
-                  <X size={18} />
-                </button>
-              </div>
-              <form onSubmit={handleCreateTask} className="p-6 space-y-4">
-                <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100 mb-2">
-                  <p className="text-xs font-bold text-indigo-600 uppercase mb-1">Scope Context</p>
-                  <p className="text-sm font-semibold text-indigo-900">{selectedScope?.title}</p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Task Title</label>
-                  <input
-                    type="text" required
-                    value={newTask.title}
-                    onChange={e => setNewTask(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="e.g., Implement Authentication Controller"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
-                  <textarea
-                    rows={3}
-                    value={newTask.description}
-                    onChange={e => setNewTask(prev => ({ ...prev, description: e.target.value }))}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                    placeholder="Details about implementation requirements..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Assign to Developer</label>
-                    <select
-                      required
-                      value={newTask.assigned_to}
-                      onChange={e => setNewTask(prev => ({ ...prev, assigned_to: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    >
-                      <option value="">Select Developer</option>
-                      {developers.map(dev => (
-                        <option key={dev.id} value={dev.id}>{dev.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Due Date</label>
-                    <input
-                      type="date" required
-                      value={newTask.due_date}
-                      onChange={e => setNewTask(prev => ({ ...prev, due_date: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority</label>
-                    <select
-                      value={newTask.priority}
-                      onChange={e => setNewTask(prev => ({ ...prev, priority: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none capitalize"
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                      <option value="critical">Critical</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Story Points</label>
-                    <input
-                      type="number" min="0" max="20"
-                      value={newTask.story_points}
-                      onChange={e => setNewTask(prev => ({ ...prev, story_points: parseInt(e.target.value) }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Est. Hours</label>
-                    <input
-                      type="number" min="0"
-                      value={newTask.estimated_hours}
-                      onChange={e => setNewTask(prev => ({ ...prev, estimated_hours: parseInt(e.target.value) }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-xl space-y-3">
-                  <p className="text-xs font-bold text-gray-400 uppercase">Automation</p>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newTask.sync_jira}
-                      onChange={e => setNewTask(prev => ({ ...prev, sync_jira: e.target.checked }))}
-                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <div className="flex items-center gap-2">
-                      <GitPullRequest size={16} className="text-gray-500" />
-                      <span className="text-sm text-gray-700 font-medium">Auto-create Jira Issue & Sync Status</span>
-                    </div>
-                  </label>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowTaskModal(false)}
-                    className="flex-1 py-3 border border-gray-200 text-gray-700 font-bold rounded-2xl hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit" disabled={creatingTask}
-                    className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-2xl shadow-xl shadow-indigo-100 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {creatingTask ? <Loader2 size={20} className="animate-spin" /> : <><Plus size={20} /> Deploy Task</>}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      </motion.div>
     </div>
   );
 };
+
+export default TeamLeaderDashboard;

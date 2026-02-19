@@ -3,26 +3,44 @@ import logger from '../utils/logger.js';
 import { jiraService } from '../services/jiraService.js';
 import { githubService } from '../services/githubService.js';
 
-// POST /api/projects - HR creates project
+// POST /api/projects - Stakeholder proposes or HR creates project
 export const createProject = async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const { name, description, project_key, priority, deadline, budget, create_github_repo, github_repo_private, manager_ids } = req.body;
+    const isStakeholder = req.user.role === 'stakeholder';
 
     // Generate project key if not provided
     const key = project_key || name.replace(/[^A-Za-z]/g, '').substring(0, 6).toUpperCase();
 
     // 1. Create project in PostgreSQL
+    const status = isStakeholder ? 'proposed' : 'pending';
     const projectResult = await client.query(
-      `INSERT INTO projects (name, description, project_key, priority, deadline, budget, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO projects (name, description, project_key, status, priority, deadline, budget, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [name, description, key, priority, deadline, budget, req.user.id]
+      [name, description, key, status, priority, deadline, budget, req.user.id]
     );
     const project = projectResult.rows[0];
 
+    // If stakeholder, skip integrations and assignments for now
+    if (isStakeholder) {
+      await client.query(
+        `INSERT INTO activity_log (user_id, project_id, action, entity_type, entity_id, details)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [req.user.id, project.id, 'proposed', 'project', project.id, JSON.stringify({ name })]
+      );
+      await client.query('COMMIT');
+      return res.status(201).json({
+        success: true,
+        message: 'Project proposal submitted successfully. Waiting for HR approval.',
+        project
+      });
+    }
+
+    // --- HR Creation Logic (Legacy/Direct) ---
     // 2. Auto-create Jira project
     let jiraData = null;
     let jiraWarning = null;
@@ -69,7 +87,6 @@ export const createProject = async (req, res, next) => {
            ON CONFLICT (project_id, manager_id) DO NOTHING`,
           [project.id, managerId]
         );
-        // Create notification for each manager
         await client.query(
           `INSERT INTO notifications (user_id, title, message, type, link)
            VALUES ($1, $2, $3, $4, $5)`,
@@ -111,6 +128,121 @@ export const createProject = async (req, res, next) => {
   }
 };
 
+// POST /api/projects/:id/approve - HR approves project proposal
+export const approveProject = async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { id } = req.params;
+    const { manager_ids, create_github_repo, github_repo_private } = req.body;
+
+    const projectResult = await client.query('SELECT * FROM projects WHERE id = $1', [id]);
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+    const project = projectResult.rows[0];
+
+    if (project.status !== 'proposed') {
+      return res.status(400).json({ success: false, message: 'Only proposed projects can be approved' });
+    }
+
+    // 1. Update project status to pending (waiting for manager acceptance)
+    await client.query('UPDATE projects SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', ['pending', id]);
+
+    // 2. Jira Integration
+    let jiraData = null;
+    try {
+      jiraData = await jiraService.createProject(project.project_key, project.name);
+      await client.query(
+        `INSERT INTO jira_mapping (project_id, jira_project_id, jira_project_key)
+         VALUES ($1, $2, $3)`,
+        [project.id, jiraData.id?.toString(), jiraData.key]
+      );
+    } catch (err) {
+      logger.warn(`HR Approval Jira integration failed: ${err.message}`);
+    }
+
+    // 3. GitHub Integration
+    if (create_github_repo) {
+      try {
+        const githubData = await githubService.createRepo({
+          name: project.name.toLowerCase().replace(/\s+/g, '-'),
+          description: project.description || `ProjectPulse: ${project.name}`,
+          private: github_repo_private || false
+        });
+        await client.query(
+          `INSERT INTO github_mapping (project_id, repo_name, repo_url, repo_full_name, is_private)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [project.id, githubData.name, githubData.html_url, githubData.full_name, githubData.private]
+        );
+      } catch (err) {
+        logger.warn(`HR Approval GitHub integration failed: ${err.message}`);
+      }
+    }
+
+    // 4. Assign Managers
+    if (manager_ids && manager_ids.length > 0) {
+      for (const managerId of manager_ids) {
+        await client.query(
+          `INSERT INTO project_managers (project_id, manager_id) VALUES ($1, $2)
+           ON CONFLICT (project_id, manager_id) DO NOTHING`,
+          [id, managerId]
+        );
+        await client.query(
+          `INSERT INTO notifications (user_id, title, message, type, link)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [managerId, 'New Project Proposal Approved', `An approved project proposal "${project.name}" needs your review.`, 'info', `/projects/${id}`]
+        );
+      }
+    }
+
+    // Notify stakeholder
+    await client.query(
+      `INSERT INTO notifications (user_id, title, message, type)
+       VALUES ($1, $2, $3, $4)`,
+      [project.created_by, 'Project Proposal Approved', `Your project proposal "${project.name}" has been approved by HR.`, 'success']
+    );
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Project approved successfully' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    next(error);
+  } finally {
+    client.release();
+  }
+};
+
+// POST /api/projects/:id/reject - HR rejects project proposal
+export const rejectProject = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const result = await pool.query(
+      `UPDATE projects SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'proposed' RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Project not found or not in proposed state' });
+    }
+
+    const project = result.rows[0];
+
+    // Notify stakeholder
+    await pool.query(
+      `INSERT INTO notifications (user_id, title, message, type)
+       VALUES ($1, $2, $3, $4)`,
+      [project.created_by, 'Project Proposal Rejected', `Your project proposal "${project.name}" was rejected. Reason: ${reason || 'Not specified'}`, 'error']
+    );
+
+    res.json({ success: true, message: 'Project proposal rejected' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // GET /api/projects - Get projects based on user role
 export const getProjects = async (req, res, next) => {
   try {
@@ -119,8 +251,9 @@ export const getProjects = async (req, res, next) => {
     let query, params;
 
     switch (role) {
+      case 'admin':
       case 'hr':
-        // HR sees all projects
+        // Admin and HR see all projects
         query = `
           SELECT p.*, u.name as creator_name,
             (SELECT json_agg(json_build_object('id', gm.id, 'repo_url', gm.repo_url, 'repo_name', gm.repo_name))
@@ -131,6 +264,21 @@ export const getProjects = async (req, res, next) => {
           LEFT JOIN users u ON p.created_by = u.id
           ORDER BY p.created_at DESC`;
         params = [];
+        break;
+
+      case 'stakeholder':
+        // Stakeholders see projects they created
+        query = `
+          SELECT p.*, u.name as creator_name,
+            (SELECT json_agg(json_build_object('id', gm.id, 'repo_url', gm.repo_url, 'repo_name', gm.repo_name))
+             FROM github_mapping gm WHERE gm.project_id = p.id) as github_repos,
+            (SELECT json_agg(json_build_object('id', jm.id, 'jira_key', jm.jira_project_key))
+             FROM jira_mapping jm WHERE jm.project_id = p.id AND jm.task_id IS NULL) as jira_info
+          FROM projects p
+          LEFT JOIN users u ON p.created_by = u.id
+          WHERE p.created_by = $1
+          ORDER BY p.created_at DESC`;
+        params = [userId];
         break;
 
       case 'manager':

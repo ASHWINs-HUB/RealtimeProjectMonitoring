@@ -3,6 +3,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
 class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
+    this._redirecting = false; // Prevent multiple 401 redirects
   }
 
   getToken() {
@@ -34,9 +35,18 @@ class ApiService {
       const response = await fetch(url, config);
 
       if (response.status === 401) {
-        this.removeToken();
-        window.location.href = '/login';
-        throw new Error('Session expired');
+        // Don't auto-redirect for auth endpoints (login, register, verify-admin)
+        const isAuthEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/register') || endpoint.includes('/auth/verify-admin');
+        if (!isAuthEndpoint && !this._redirecting) {
+          this._redirecting = true;
+          this.removeToken();
+          localStorage.removeItem('pp-auth'); // Clear stale zustand persisted state
+          window.location.href = '/login';
+          throw new Error('Session expired');
+        }
+        // For auth endpoints, just throw the error without redirect
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.message || 'Authentication failed');
       }
 
       const data = await response.json();
@@ -230,6 +240,53 @@ class ApiService {
 
   async triggerBatchCompute() {
     return this.request('/analytics/compute-all', { method: 'POST' });
+  }
+
+  async getRiskThresholds() {
+    return this.request('/analytics/risk-thresholds');
+  }
+
+  async getRoleRiskMetrics() {
+    return this.request('/analytics/role-risk');
+  }
+
+  async triggerEscalationCheck() {
+    return this.request('/analytics/escalation-check', { method: 'POST' });
+  }
+
+  async verifyAdmin(email, password) {
+    return this.request('/auth/verify-admin', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
+  async createUser(userData) {
+    return this.request('/auth/users', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+  }
+
+  async updateRole(userId, role) {
+    return this.request('/auth/update-role', {
+      method: 'PUT',
+      body: JSON.stringify({ userId, role })
+    });
+  }
+
+  async approveProject(projectId, data) {
+    return this.request(`/projects/${projectId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async rejectProject(projectId, reason) {
+    return this.request(`/projects/${projectId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    });
   }
 }
 

@@ -94,8 +94,10 @@ export const validateRegister = (req, res, next) => {
     name: Joi.string().min(2).max(255).required(),
     email: Joi.string().email().required(),
     password: Joi.string().min(6).max(100).required(),
-    role: Joi.string().valid('hr', 'manager', 'team_leader', 'developer').required(),
-    department: Joi.string().max(255).allow('', null)
+    role: Joi.string().valid('hr', 'manager', 'team_leader', 'developer', 'admin', 'stakeholder').required(),
+    department: Joi.string().max(255).allow('', null),
+    adminEmail: Joi.string().email().required(),
+    adminPassword: Joi.string().required()
   });
 
   const { error, value } = schema.validate(req.body, { abortEarly: false });

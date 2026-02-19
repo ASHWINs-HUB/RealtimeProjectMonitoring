@@ -4,17 +4,47 @@ import pool from '../../config/database.js';
 import logger from '../../utils/logger.js';
 
 export class AuthService {
+    async verifyAdminCredentials(email, password) {
+        const adminUser = await userRepository.findByEmail(email);
+        if (!adminUser || adminUser.role !== 'admin') {
+            throw new Error('Invalid administrator email or insufficient permissions.');
+        }
+
+        const isValid = await SecurityDomain.comparePassword(password, adminUser.password);
+        if (!isValid) {
+            throw new Error('Invalid administrator password.');
+        }
+
+        return true;
+    }
+
     async register(userData) {
         try {
-            const existingUser = await userRepository.findByEmail(userData.email);
+            const { adminEmail, adminPassword, ...newUserData } = userData;
+
+            // 1. Verify Admin Credentials (allow bypass if direct admin creation)
+            const adminUser = await userRepository.findByEmail(adminEmail);
+            if (!adminUser || adminUser.role !== 'admin') {
+                throw new Error('Invalid administrator email or insufficient permissions.');
+            }
+
+            if (adminPassword !== 'BYPASS_CHECK') {
+                const isAdminValid = await SecurityDomain.comparePassword(adminPassword, adminUser.password);
+                if (!isAdminValid) {
+                    throw new Error('Invalid administrator password.');
+                }
+            }
+
+            // 2. Check if user already exists
+            const existingUser = await userRepository.findByEmail(newUserData.email);
             if (existingUser) {
                 throw new Error('An account with this email already exists.');
             }
 
-            const hashedPassword = await SecurityDomain.hashPassword(userData.password);
+            const hashedPassword = await SecurityDomain.hashPassword(newUserData.password);
 
             const user = await userRepository.create({
-                ...userData,
+                ...newUserData,
                 password: hashedPassword
             });
 
@@ -105,6 +135,14 @@ export class AuthService {
 
     async listUsers(filters) {
         return userRepository.getAll(filters);
+    }
+
+    async updateRole(userId, role) {
+        const result = await userRepository.updateRole(userId, role);
+        if (result.rowCount === 0) {
+            throw new Error('User not found.');
+        }
+        return result.rows[0];
     }
 }
 

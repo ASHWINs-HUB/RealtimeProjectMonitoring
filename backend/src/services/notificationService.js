@@ -31,14 +31,14 @@ class NotificationService {
 
             const projectName = project.rows[0].name;
             const owners = await pool.query(`
-                SELECT user_id FROM project_managers WHERE project_id = $1
+                SELECT manager_id as id FROM project_managers WHERE project_id = $1
                 UNION 
-                SELECT created_by FROM projects WHERE id = $1
+                SELECT created_by as id FROM projects WHERE id = $1
             `, [projectId]);
 
             for (const owner of owners.rows) {
                 await this.sendNotification({
-                    userId: owner.user_id || owner.id,
+                    userId: owner.id,
                     title: `⚠️ CRITICAL RISK: ${projectName}`,
                     message: `Project risk has reached ${riskScore}% (${level}). Confidence: ${confidence}%. Action required: review resource allocation and task blockers.`,
                     type: 'error',

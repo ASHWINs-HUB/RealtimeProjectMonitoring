@@ -1,9 +1,9 @@
-// Load environment variables and validate
+﻿// Load environment variables and validate
 const dotenv = require('dotenv');
 dotenv.config();
 
 if (!process.env.WEBHOOK_SECRET) {
-  console.error('❌ WEBHOOK_SECRET environment variable is required. Set it in backend/.env and restart the server.');
+  console.error('âŒ WEBHOOK_SECRET environment variable is required. Set it in backend/.env and restart the server.');
   process.exit(1);
 }
 
@@ -21,8 +21,8 @@ const server = createServer(app);
 
 // Middleware
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://yourdomain.com'] 
+  origin: process.env.NODE_ENV === 'production'
+    ? ['https://yourdomain.com']
     : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3001'],
   credentials: true
 }));
@@ -74,5 +74,15 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`ðŸš€ Server running on port ${PORT}`);
 });
+
+// Graceful shutdown
+const gracefulShutdown = () => {
+  server.close(() => {
+    process.exit(0);
+  });
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

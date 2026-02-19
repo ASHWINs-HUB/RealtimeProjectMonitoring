@@ -1,70 +1,57 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/ui/Toast';
 import api from '@/services/api';
 import { motion } from 'framer-motion';
+import { RiskAlertBanner, RiskScoreGauge } from '@/components/ui/RiskAlerts';
 import {
-  FolderKanban, Users, TrendingUp, AlertTriangle, Plus,
-  ArrowUpRight, BarChart3, Activity, CheckCircle, Clock,
-  Zap, Target, X, Loader2
+  Users, Heart, RefreshCw, Shield, BarChart3,
+  TrendingDown, Activity, AlertTriangle, Eye
 } from 'lucide-react';
 
-// Stat card component
-const StatCard = ({ icon: Icon, label, value, trend, color, delay }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ delay }}
-    className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
-  >
-    <div className="flex items-start justify-between">
-      <div>
-        <p className="text-sm text-gray-500 font-medium">{label}</p>
-        <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-        {trend && (
-          <p className={`text-xs font-medium mt-1 flex items-center gap-1 ${trend > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-            <ArrowUpRight size={12} className={trend < 0 ? 'rotate-180' : ''} />
-            {Math.abs(trend)}% from last month
-          </p>
-        )}
-      </div>
-      <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${color}`}>
-        <Icon size={20} className="text-white" />
-      </div>
-    </div>
-  </motion.div>
-);
-
+/**
+ * HR Dashboard — Role-specific
+ * Shows:
+ * - Burnout probability trends
+ * - High-risk department overview
+ * - Employee risk distribution
+ * - Long-term productivity decline signals
+ *
+ * Removes: Code-level analytics, PR technical metrics
+ * Alerts: Warning > 60%, Danger > 75%
+ */
 export const HRDashboard = () => {
   const { user } = useAuthStore();
   const toast = useToast();
-  const [projects, setProjects] = useState([]);
-  const [analytics, setAnalytics] = useState(null);
+  const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [dismissedAlerts, setDismissedAlerts] = useState([]);
 
   const fetchData = useCallback(async () => {
     try {
-      const [projData, analyticsData] = await Promise.all([
-        api.getProjects(),
-        api.getDashboardAnalytics().catch(() => null)
-      ]);
-      setProjects(projData.projects || []);
-      setAnalytics(analyticsData?.analytics || null);
-    } catch (error) {
+      const riskData = await api.getRoleRiskMetrics().catch(() => null);
+      setMetrics(riskData?.metrics || {});
+    } catch {
       toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const stats = {
-    total: projects.length,
-    active: projects.filter(p => ['active', 'in_progress', 'on_track', 'at_risk', 'delayed'].includes(p.status)).length,
-    completed: projects.filter(p => p.status === 'completed').length,
-    atRisk: projects.filter(p => p.status === 'at_risk' || (analytics?.project_health?.find(h => h.name === p.name)?.risk_score > 60)).length || 0
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await api.triggerBatchCompute();
+      toast.success('Burnout analysis refreshed');
+      fetchData();
+    } catch {
+      toast.error('Refresh failed');
+    } finally {
+      setSyncing(false);
+    }
   };
 
   if (loading) {
@@ -75,128 +62,190 @@ export const HRDashboard = () => {
     );
   }
 
+  const hrRisk = metrics?.hr_risk_score ?? 0;
+  const thresholds = metrics?.thresholds || { warning: 60, danger: 75 };
+  const alerts = (metrics?.alerts || []).filter((_, i) => !dismissedAlerts.includes(i));
+  const burnoutRisks = metrics?.burnout_risks || [];
+  const riskDistribution = metrics?.risk_distribution || { low: 0, medium: 0, high: 0 };
+  const totalEmployees = metrics?.total_employees ?? 0;
+
+  const totalRiskCount = riskDistribution.low + riskDistribution.medium + riskDistribution.high;
+
+  const fadeIn = {
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.4 },
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Welcome header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Welcome back, {user?.name?.split(' ')[0]} 👋
-          </h1>
-          <p className="text-gray-500 mt-1">Here's what's happening across your projects</p>
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight">HR Wellness Center</h1>
+          <p className="text-gray-500 font-medium">Employee burnout monitoring & workforce health</p>
         </div>
-      </div>
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-600/20 transition-all active:scale-95 disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+          {syncing ? 'Analyzing...' : 'Refresh Analysis'}
+        </button>
+      </header>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard icon={FolderKanban} label="Total Projects" value={stats.total} color="bg-indigo-500" delay={0} />
-        <StatCard icon={Activity} label="Active" value={stats.active} color="bg-emerald-500" delay={0.05} />
-        <StatCard icon={CheckCircle} label="Completed" value={stats.completed} color="bg-blue-500" delay={0.1} />
-        <StatCard icon={AlertTriangle} label="At Risk" value={stats.atRisk} color="bg-red-500" delay={0.15} />
-      </div>
+      <RiskAlertBanner alerts={alerts} onDismiss={(i) => setDismissedAlerts(p => [...p, i])} />
 
-      {/* Projects table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Recent Projects</h3>
-          <Link to="/projects" className="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
-            View all →
-          </Link>
-        </div>
-        {projects.length === 0 ? (
-          <div className="p-12 text-center">
-            <FolderKanban size={40} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-500 font-medium">No projects yet</p>
-            <p className="text-gray-400 text-sm mt-1">Create your first project to get started</p>
+      {/* Top Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <motion.div {...fadeIn} className="bg-gradient-to-br from-gray-900 to-purple-950 p-6 rounded-[2rem] text-white shadow-2xl flex flex-col items-center justify-center">
+          <RiskScoreGauge score={hrRisk} label="Workforce Risk" size="lg" thresholds={thresholds} />
+          <span className={`mt-3 text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${metrics?.risk_level === 'danger' ? 'bg-red-500/20 text-red-300' :
+              metrics?.risk_level === 'warning' ? 'bg-amber-500/20 text-amber-300' :
+                'bg-emerald-500/20 text-emerald-300'
+            }`}>
+            {metrics?.risk_level === 'danger' ? 'Critical Burnout' : metrics?.risk_level === 'warning' ? 'Elevated Risk' : 'Healthy'}
+          </span>
+        </motion.div>
+
+        <motion.div {...fadeIn} transition={{ delay: 0.1 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-purple-50 rounded-xl">
+              <Users size={20} className="text-purple-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Workforce</p>
+              <p className="text-3xl font-black text-gray-900">{totalEmployees}</p>
+            </div>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Project</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden sm:table-cell">Status</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden md:table-cell">Progress</th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase hidden lg:table-cell">Deadline</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
+          <p className="text-[10px] font-bold text-gray-400">Active team members being monitored</p>
+        </motion.div>
+
+        <motion.div {...fadeIn} transition={{ delay: 0.2 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-red-50 rounded-xl">
+              <Heart size={20} className="text-red-600" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">At-Risk Employees</p>
+              <p className="text-3xl font-black text-red-600">{burnoutRisks.length}</p>
+            </div>
+          </div>
+          <p className="text-[10px] font-bold text-gray-400">Showing burnout signals (&gt;40%)</p>
+        </motion.div>
+
+        <motion.div {...fadeIn} transition={{ delay: 0.3 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2.5 bg-indigo-50 rounded-xl">
+              <BarChart3 size={20} className="text-indigo-600" />
+            </div>
+            <h4 className="font-black text-gray-900 text-[10px] uppercase tracking-widest">Risk Distribution</h4>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-1">
+                <span className="text-emerald-600">Low Risk</span>
+                <span className="text-gray-400">{riskDistribution.low}</span>
+              </div>
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${totalRiskCount > 0 ? (riskDistribution.low / totalRiskCount) * 100 : 0}%` }} />
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-1">
+                <span className="text-amber-600">Medium Risk</span>
+                <span className="text-gray-400">{riskDistribution.medium}</span>
+              </div>
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-amber-500 rounded-full" style={{ width: `${totalRiskCount > 0 ? (riskDistribution.medium / totalRiskCount) * 100 : 0}%` }} />
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-1">
+                <span className="text-red-600">High Risk</span>
+                <span className="text-gray-400">{riskDistribution.high}</span>
+              </div>
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-red-500 rounded-full" style={{ width: `${totalRiskCount > 0 ? (riskDistribution.high / totalRiskCount) * 100 : 0}%` }} />
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Burnout Risk Table */}
+      <motion.div {...fadeIn} transition={{ delay: 0.4 }} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100 flex items-center gap-2">
+          <Heart size={18} className="text-red-500" />
+          <h3 className="font-black text-gray-900 text-sm uppercase tracking-widest">Burnout Risk Monitoring</h3>
+          <span className="ml-auto text-[10px] font-black text-gray-400 uppercase tracking-widest">
+            {burnoutRisks.length} employee{burnoutRisks.length !== 1 ? 's' : ''} flagged
+          </span>
+        </div>
+        {burnoutRisks.length > 0 ? (
+          <table className="w-full text-left">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Employee</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Role</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Burnout Score</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Level</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Recommended Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {burnoutRisks.sort((a, b) => b.burnout_score - a.burnout_score).map(emp => (
+                <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600 font-black text-xs">
+                        {emp.name?.charAt(0)}
+                      </div>
+                      <span className="font-bold text-gray-900">{emp.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                      {emp.role?.replace('_', ' ')}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${emp.burnout_score >= 70 ? 'bg-red-500' :
+                            emp.burnout_score >= 50 ? 'bg-amber-500' : 'bg-orange-400'
+                          }`} style={{ width: `${emp.burnout_score}%` }} />
+                      </div>
+                      <span className="text-xs font-black text-gray-700">{emp.burnout_score}%</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${emp.level === 'critical' ? 'bg-red-50 text-red-600' :
+                        emp.level === 'moderate' ? 'bg-amber-50 text-amber-600' :
+                          'bg-orange-50 text-orange-600'
+                      }`}>{emp.level}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-xs font-bold text-gray-500">
+                      {emp.burnout_score >= 70 ? '🔴 Mandatory leave / workload redistribution' :
+                        emp.burnout_score >= 50 ? '🟡 Schedule 1:1 check-in' :
+                          '💬 Monitor workload'}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {projects.slice(0, 8).map((project) => (
-                  <tr key={project.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-5 py-4">
-                      <div>
-                        <p className="font-medium text-gray-900">{project.name}</p>
-                        <p className="text-xs text-gray-500">{project.project_key}</p>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 hidden sm:table-cell">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium
-                          ${['active', 'in_progress', 'on_track'].includes(project.status) ? 'bg-emerald-50 text-emerald-700' :
-                          project.status === 'completed' ? 'bg-blue-50 text-blue-700' :
-                            ['at_risk', 'delayed'].includes(project.status) ? 'bg-red-50 text-red-700' :
-                              project.status === 'pending' ? 'bg-amber-50 text-amber-700' :
-                                'bg-gray-50 text-gray-700'
-                        }`}>
-                        {project.status?.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 hidden md:table-cell">
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-2 rounded-full bg-gray-100 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all"
-                            style={{ width: `${project.progress || 0}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-500 font-medium">{project.progress || 0}%</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 hidden lg:table-cell text-sm text-gray-500">
-                      {project.deadline ? new Date(project.deadline).toLocaleDateString() : '—'}
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <Link
-                        to={`/projects/${project.id}`}
-                        className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-                      >
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="p-12 text-center text-gray-400">
+            <Heart size={32} className="mx-auto mb-3 opacity-40" />
+            <p className="font-bold">No burnout risks detected</p>
+            <p className="text-xs">All team members are currently within healthy ranges.</p>
           </div>
         )}
-      </div>
-
-      {/* Risk Overview */}
-      {analytics?.risk_distribution?.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <AlertTriangle size={18} className="text-amber-500" />
-            Risk Overview
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {['low', 'medium', 'high', 'critical'].map(level => {
-              const data = analytics.risk_distribution.find(r => r.risk_level === level);
-              const colors = {
-                low: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-                medium: 'bg-amber-50 text-amber-700 border-amber-200',
-                high: 'bg-orange-50 text-orange-700 border-orange-200',
-                critical: 'bg-red-50 text-red-700 border-red-200'
-              };
-              return (
-                <div key={level} className={`p-4 rounded-xl border ${colors[level]}`}>
-                  <p className="text-sm font-medium capitalize">{level}</p>
-                  <p className="text-2xl font-bold mt-1">{data?.count || 0}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      </motion.div>
     </div>
   );
 };
+
+export default HRDashboard;

@@ -71,11 +71,11 @@ export const AnalyticsPage = () => {
         <div className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-bl-[100px] -mr-4 -mt-4 transition-all group-hover:scale-110" />
           <BarChart3 size={24} className="text-indigo-600 mb-4 relative z-10" />
-          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest relative z-10">Avg Portfolio Health</p>
+          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest relative z-10">Avg Portfolio Progress</p>
           <div className="flex items-end gap-2 mt-2 relative z-10">
-            <h3 className="text-4xl font-black text-gray-900">88.4%</h3>
+            <h3 className="text-4xl font-black text-gray-900">{Math.round(data?.summary?.avg_progress || 0)}%</h3>
             <span className="text-sm font-bold text-emerald-600 mb-1 flex items-center">
-              <ArrowUpRight size={14} /> +2.1%
+              <ArrowUpRight size={14} /> Live
             </span>
           </div>
         </div>
@@ -95,20 +95,20 @@ export const AnalyticsPage = () => {
         <div className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-bl-[100px] -mr-4 -mt-4 transition-all group-hover:scale-110" />
           <Target size={24} className="text-emerald-600 mb-4 relative z-10" />
-          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest relative z-10">Delivery Velocity</p>
+          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest relative z-10">Total Tasks</p>
           <div className="flex items-end gap-2 mt-2 relative z-10">
-            <h3 className="text-4xl font-black text-gray-900">1.4x</h3>
-            <span className="text-sm font-bold text-emerald-600 mb-1">Ahead of plan</span>
+            <h3 className="text-4xl font-black text-gray-900">{data?.summary?.total_tasks || 0}</h3>
+            <span className="text-sm font-bold text-emerald-600 mb-1">Calculated</span>
           </div>
         </div>
 
         <div className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-bl-[100px] -mr-4 -mt-4 transition-all group-hover:scale-110" />
           <Zap size={24} className="text-amber-600 mb-4 relative z-10" />
-          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest relative z-10">Innovation Index</p>
+          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest relative z-10">Active Projects</p>
           <div className="flex items-end gap-2 mt-2 relative z-10">
-            <h3 className="text-4xl font-black text-gray-900">A+</h3>
-            <span className="text-xs font-bold text-gray-400 mb-1">Top tier efficiency</span>
+            <h3 className="text-4xl font-black text-gray-900">{data?.summary?.active_projects || 0}</h3>
+            <span className="text-xs font-bold text-gray-400 mb-1">In progress</span>
           </div>
         </div>
       </div>

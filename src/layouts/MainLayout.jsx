@@ -4,14 +4,23 @@ import { useAuthStore } from '@/store/authStore';
 import { useNotificationStore } from '@/store/notificationStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Menu, X, Home, FolderKanban, BarChart3, Users, LogOut,
-  Target, TrendingUp, CheckSquare, Bell, ChevronDown,
-  Lightbulb, UserCheck, ClipboardList, Award, Settings,
-  GitBranch, Zap
+  GitBranch, Zap, Shield, Briefcase, FolderKanban, BarChart3, Settings,
+  Home, Users, Lightbulb, CheckSquare, X, LogOut, Bell, Menu
 } from 'lucide-react';
 
 // Role-based navigation configuration
 const ROLE_NAV = {
+  admin: [
+    { path: '/dashboard', label: 'Admin Hub', icon: Shield },
+    { path: '/projects', label: 'Projects', icon: FolderKanban },
+    { path: '/analytics', label: 'Global Analytics', icon: BarChart3 },
+    { path: '/settings', label: 'System Settings', icon: Settings },
+  ],
+  stakeholder: [
+    { path: '/dashboard', label: 'Proposals', icon: Briefcase },
+    { path: '/projects', label: 'My Projects', icon: FolderKanban },
+    { path: '/analytics', label: 'Portfolio Stats', icon: BarChart3 },
+  ],
   hr: [
     { path: '/dashboard', label: 'Dashboard', icon: Home },
     { path: '/projects', label: 'Projects', icon: FolderKanban },
@@ -33,8 +42,8 @@ const ROLE_NAV = {
   ],
   developer: [
     { path: '/dashboard', label: 'Dashboard', icon: Home },
-    { path: '/tasks', label: 'Assigned Tasks', icon: CheckSquare },
-    { path: '/my-score', label: 'My Score', icon: Award },
+    { path: '/tasks', label: 'My Tasks', icon: CheckSquare },
+    { path: '/analytics', label: 'Analytics', icon: BarChart3 },
   ]
 };
 
@@ -60,6 +69,8 @@ export const MainLayout = ({ children }) => {
   };
 
   const roleLabels = {
+    admin: 'Global Admin',
+    stakeholder: 'Stakeholder',
     hr: 'HR Admin',
     manager: 'Manager',
     team_leader: 'Team Leader',
@@ -67,6 +78,8 @@ export const MainLayout = ({ children }) => {
   };
 
   const roleColors = {
+    admin: 'from-gray-900 to-black',
+    stakeholder: 'from-blue-600 to-cyan-500',
     hr: 'from-violet-500 to-purple-600',
     manager: 'from-blue-500 to-indigo-600',
     team_leader: 'from-teal-500 to-cyan-600',

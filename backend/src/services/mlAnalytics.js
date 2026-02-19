@@ -16,12 +16,13 @@ import * as ss from 'simple-statistics';
 import pool from '../config/database.js';
 import { githubService } from './githubService.js';
 import { notificationService } from './notificationService.js';
+import { mlBridge } from './mlBridge.js';
 import logger from '../utils/logger.js';
 import config from '../config/index.js';
 
 class MLAnalyticsEngine {
     constructor() {
-        this.modelVersion = '2.1.0';
+        this.modelVersion = '2.1.0-hybrid';
         this.minSamples = config.ml?.minSamples || 3;
     }
 
@@ -104,6 +105,41 @@ class MLAnalyticsEngine {
     async computeRiskScore(projectId) {
         try {
             const features = await this.extractProjectFeatures(projectId);
+
+            // 1. Try Python ML Service (XGBoost)
+            let mlResult = null;
+            try {
+                mlResult = await mlBridge.predict(features);
+            } catch (err) {
+                logger.warn(`ML Service unavailable for project ${projectId}, falling back to heuristics: ${err.message}`);
+            }
+
+            if (mlResult) {
+                logger.info(`Using Python ML prediction for project ${projectId}: ${mlResult.risk_score}%`);
+
+                const level = mlResult.risk_level.toLowerCase();
+                const confidence = Math.round(mlResult.confidence * 100);
+
+                await this.storeMetric(
+                    projectId, null, 'risk_score',
+                    mlResult.risk_score, confidence, features
+                );
+
+                // Trigger proactive alerts
+                await notificationService.triggerRiskAlerts(
+                    projectId, mlResult.risk_score, level, confidence
+                );
+
+                return {
+                    score: mlResult.risk_score,
+                    level: level,
+                    confidence: confidence,
+                    factors: features,
+                    source: 'xgboost'
+                };
+            }
+
+            // 2. Fallback to Heuristic Engine (Node.js)
             const weights = {
                 blocked_rate: 3.5,
                 overdue_rate: 4.0,
@@ -125,18 +161,19 @@ class MLAnalyticsEngine {
             const riskScore = Math.round(riskProbability * 100);
 
             const confidence = [features.total_tasks > 0, features.monthly_commits > 0].filter(Boolean).length / 2;
-            const level = riskScore > 70 ? 'critical' : riskScore > 50 ? 'high' : riskScore > 30 ? 'medium' : 'low';
+            const heuristicLevel = riskScore > 70 ? 'critical' : riskScore > 50 ? 'high' : riskScore > 30 ? 'medium' : 'low';
 
             await this.storeMetric(projectId, null, 'risk_score', riskScore, confidence, features);
 
             // Trigger proactive alerts
-            await notificationService.triggerRiskAlerts(projectId, riskScore, level, Math.round(confidence * 100));
+            await notificationService.triggerRiskAlerts(projectId, riskScore, heuristicLevel, Math.round(confidence * 100));
 
             return {
                 score: riskScore,
-                level,
+                level: heuristicLevel,
                 confidence: Math.round(confidence * 100),
-                factors: features
+                factors: features,
+                source: 'heuristic'
             };
         } catch (error) {
             logger.error(`Risk score failed for project ${projectId}:`, error);
@@ -369,17 +406,57 @@ class MLAnalyticsEngine {
     async getDashboardAnalytics(role, userId) {
         try {
             const result = {};
+            let projectsQuery;
+            let projectsParams = [];
 
-            // Project health overview
-            const projects = await pool.query(
-                `SELECT p.id, p.name, p.status, p.progress, p.priority, p.deadline,
-                    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count,
-                    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') as done_count,
-                    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'blocked') as blocked_count
-                 FROM projects p
-                 WHERE p.status NOT IN ('completed', 'cancelled')
-                 ORDER BY p.created_at DESC`
-            );
+            // 1. Role-aware project selection
+            if (role === 'hr' || role === 'admin') {
+                projectsQuery = `
+                    SELECT p.id, p.name, p.status, p.progress, p.priority, p.deadline, p.created_at,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') as done_count,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'blocked') as blocked_count
+                    FROM projects p
+                    WHERE p.status NOT IN ('completed', 'cancelled')
+                    ORDER BY p.created_at DESC`;
+            } else if (role === 'stakeholder') {
+                projectsQuery = `
+                    SELECT p.id, p.name, p.status, p.progress, p.priority, p.deadline, p.created_at,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') as done_count,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'blocked') as blocked_count
+                    FROM projects p
+                    WHERE p.created_by = $1 AND p.status NOT IN ('completed', 'cancelled')
+                    ORDER BY p.created_at DESC`;
+                projectsParams = [userId];
+            } else if (role === 'manager') {
+                projectsQuery = `
+                    SELECT DISTINCT p.id, p.name, p.status, p.progress, p.priority, p.deadline, p.created_at,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') as done_count,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'blocked') as blocked_count
+                    FROM projects p
+                    JOIN project_managers pm ON p.id = pm.project_id AND pm.manager_id = $1
+                    WHERE p.status NOT IN ('completed', 'cancelled')
+                    ORDER BY p.created_at DESC`;
+                projectsParams = [userId];
+            } else {
+                // Developers and Team Leaders see projects they are assigned tasks or scopes in
+                projectsQuery = `
+                    SELECT DISTINCT p.id, p.name, p.status, p.progress, p.priority, p.deadline, p.created_at,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') as done_count,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'blocked') as blocked_count
+                    FROM projects p
+                    LEFT JOIN tasks t ON p.id = t.project_id AND t.assigned_to = $1
+                    LEFT JOIN scopes s ON p.id = s.project_id AND s.team_leader_id = $1
+                    WHERE (t.assigned_to = $1 OR s.team_leader_id = $1)
+                      AND p.status NOT IN ('completed', 'cancelled')
+                    ORDER BY p.created_at DESC`;
+                projectsParams = [userId];
+            }
+
+            const projects = await pool.query(projectsQuery, projectsParams);
 
             // Compute risk for each active project
             const projectHealth = [];
@@ -420,8 +497,8 @@ class MLAnalyticsEngine {
             ];
             result.risk_distribution = riskDistribution;
 
-            // Team productivity & performance (for HR/Manager)
-            if (role === 'hr' || role === 'manager') {
+            // Team productivity & performance (for HR/Manager/Admin)
+            if (role === 'hr' || role === 'manager' || role === 'admin') {
                 const teamStats = await pool.query(`
                     SELECT u.id, u.name, u.role,
                         (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id) as total_tasks,

@@ -1,0 +1,1 @@
+-- Migration moved to 007_fix_schema_inconsistencies.sql

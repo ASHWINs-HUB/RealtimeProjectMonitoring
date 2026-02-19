@@ -8,7 +8,7 @@ import {
     BarChart3, Calendar, CheckCircle2, Clock, GitBranch,
     LayoutDashboard, ListChecks, Target, AlertTriangle,
     Github, Send, Zap, ChevronRight, Activity, TrendingUp,
-    FileText, Users, Plus, Loader2, ArrowLeft
+    FileText, Users, Plus, Loader2, ArrowLeft, X
 } from 'lucide-react';
 
 export const ProjectDetailPage = () => {
@@ -24,6 +24,14 @@ export const ProjectDetailPage = () => {
     const [githubAnalytics, setGithubAnalytics] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
+    const [showScopeModal, setShowScopeModal] = useState(false);
+    const [showTaskModal, setShowTaskModal] = useState(false);
+    const [activeScope, setActiveScope] = useState(null);
+    const [teamLeaders, setTeamLeaders] = useState([]);
+    const [developers, setDevelopers] = useState([]);
+    const [submitting, setSubmitting] = useState(false);
+    const [newScope, setNewScope] = useState({ title: '', description: '', team_leader_id: '', deadline: '' });
+    const [newTask, setNewTask] = useState({ title: '', description: '', assigned_to: '', priority: 'medium', deadline: '' });
 
     const fetchData = useCallback(async () => {
         try {
@@ -43,6 +51,23 @@ export const ProjectDetailPage = () => {
             setForecast(forecastData?.forecast || null);
             setJiraAnalytics(jiraData?.analytics || null);
             setGithubAnalytics(githubData?.analytics || null);
+
+            if (user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin') {
+                const tlData = await api.getUsers('team_leader').catch(() => ({ users: [] }));
+                setTeamLeaders(tlData.users || []);
+            }
+            if (user?.role === 'team_leader' || user?.role === 'manager' || user?.role === 'admin') {
+                const devData = await api.getUsers('developer').catch(() => ({ users: [] }));
+                const tlData = await api.getUsers('team_leader').catch(() => ({ users: [] }));
+
+                // If manager, they can assign tasks to team leaders
+                // If team leader, they assign to developers
+                if (user?.role === 'manager') {
+                    setDevelopers(tlData.users || []);
+                } else {
+                    setDevelopers([...(devData.users || []), ...(tlData.users || [])]);
+                }
+            }
         } catch (error) {
             toast.error('Failed to load project details');
         } finally {
@@ -51,6 +76,77 @@ export const ProjectDetailPage = () => {
     }, [id, toast]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    const handleCreateScope = async (e) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            const scopeData = {
+                ...newScope,
+                team_leader_id: parseInt(newScope.team_leader_id),
+                deadline: newScope.deadline || null
+            };
+            await api.createScope(id, scopeData);
+            toast.success('Scope assigned to team leader!');
+            setShowScopeModal(false);
+            setNewScope({ title: '', description: '', team_leader_id: '', deadline: '' });
+            fetchData();
+        } catch (error) {
+            toast.error(error.message || 'Failed to assign scope');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleCreateTask = async (e) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            const taskData = {
+                ...newTask,
+                assigned_to: parseInt(newTask.assigned_to),
+                due_date: newTask.deadline || null, // Backend uses due_date
+                scope_id: activeScope.id
+            };
+            delete taskData.deadline; // Clean up the frontend property name
+
+            await api.createTask(id, taskData);
+            toast.success('Task created successfully!');
+            setShowTaskModal(false);
+            setNewTask({ title: '', description: '', assigned_to: '', priority: 'medium', deadline: '' });
+            fetchData();
+        } catch (error) {
+            toast.error(error.message || 'Failed to create task');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleAccept = async () => {
+        setSubmitting(true);
+        try {
+            await api.acceptProject(id);
+            toast.success('Project accepted! You can now assign scopes.');
+            fetchData();
+        } catch (error) {
+            toast.error(error.message || 'Failed to accept project');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleDecline = async () => {
+        if (!window.confirm('Are you sure you want to decline this project assignment?')) return;
+        setSubmitting(true);
+        try {
+            await api.declineProject(id);
+            toast.success('Project assignment declined');
+            window.location.href = '/projects';
+        } catch (error) {
+            toast.error(error.message || 'Failed to decline project');
+            setSubmitting(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -94,6 +190,23 @@ export const ProjectDetailPage = () => {
                         <p className="text-xs font-bold text-gray-400 uppercase">Current Phase</p>
                         <p className="text-sm font-bold text-gray-900 capitalize">{project.status?.replace('_', ' ')}</p>
                     </div>
+                    {user?.role === 'manager' && project.managers?.find(m => m.manager_id === user.id)?.status === 'pending' && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleDecline} disabled={submitting}
+                                className="px-4 py-2 text-red-600 text-xs font-bold uppercase tracking-wider hover:bg-red-50 rounded-xl transition-all"
+                            >
+                                Decline
+                            </button>
+                            <button
+                                onClick={handleAccept} disabled={submitting}
+                                className="px-6 py-2 bg-indigo-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
+                            >
+                                {submitting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                                Accept Project
+                            </button>
+                        </div>
+                    )}
                     <div className="h-10 w-[1px] bg-gray-200 mx-2 hidden sm:block" />
                     <div className={`p-3 rounded-2xl flex items-center gap-3 ${risk?.level === 'critical' || risk?.level === 'high' ? 'bg-red-50' : 'bg-emerald-50'}`}>
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${risk?.level === 'critical' || risk?.level === 'high' ? 'bg-red-500' : 'bg-emerald-500'}`}>
@@ -260,6 +373,22 @@ export const ProjectDetailPage = () => {
 
                 {activeTab === 'tasks' && (
                     <div className="space-y-8">
+                        {/* Manager Actions */}
+                        {(user?.role === 'manager' || user?.role === 'admin') && (
+                            <div className="flex justify-between items-center bg-indigo-50/50 p-6 rounded-[2rem] border border-indigo-100">
+                                <div>
+                                    <h3 className="text-lg font-bold text-indigo-900">Project Scoping</h3>
+                                    <p className="text-xs text-indigo-700 font-medium">Define high-level requirements and assign them to team leaders</p>
+                                </div>
+                                <button
+                                    onClick={() => setShowScopeModal(true)}
+                                    className="px-6 py-2.5 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center gap-2"
+                                >
+                                    <Plus size={16} /> New Scope
+                                </button>
+                            </div>
+                        )}
+
                         {scopes.map(scope => (
                             <div key={scope.id} className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                                 <div className="p-6 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between">
@@ -267,9 +396,19 @@ export const ProjectDetailPage = () => {
                                         <h3 className="text-lg font-bold text-gray-900">{scope.title}</h3>
                                         <p className="text-xs text-gray-500 mt-1">Lead: <span className="font-bold text-gray-700">{scope.team_leader_name}</span></p>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-xs font-bold text-gray-400 uppercase">Deadline</p>
-                                        <p className="text-sm font-bold text-gray-900">{new Date(scope.deadline).toLocaleDateString()}</p>
+                                    <div className="flex items-center gap-4">
+                                        {((user?.role === 'team_leader' && user?.id === scope.team_leader_id) || user?.role === 'manager' || user?.role === 'admin') && (
+                                            <button
+                                                onClick={() => { setActiveScope(scope); setShowTaskModal(true); }}
+                                                className="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-xl hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-2"
+                                            >
+                                                <Plus size={14} /> New Task
+                                            </button>
+                                        )}
+                                        <div className="text-right">
+                                            <p className="text-xs font-bold text-gray-400 uppercase">Deadline</p>
+                                            <p className="text-sm font-bold text-gray-900">{new Date(scope.deadline).toLocaleDateString()}</p>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="p-0">
@@ -639,6 +778,155 @@ export const ProjectDetailPage = () => {
                     </div>
                 )}
             </div>
+
+            {/* Modals */}
+            <AnimatePresence>
+                {showScopeModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+                        >
+                            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                                <h2 className="text-xl font-bold text-gray-900">Assign New Scope</h2>
+                                <button onClick={() => setShowScopeModal(false)} className="p-2 rounded-xl hover:bg-gray-100"><X size={18} /></button>
+                            </div>
+                            <form onSubmit={handleCreateScope} className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Scope Title</label>
+                                    <input
+                                        type="text" required
+                                        value={newScope.title}
+                                        onChange={e => setNewScope({ ...newScope, title: e.target.value })}
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        placeholder="Mobile API Optimization"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+                                    <textarea
+                                        rows={3}
+                                        value={newScope.description}
+                                        onChange={e => setNewScope({ ...newScope, description: e.target.value })}
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
+                                        placeholder="Detailed requirements for this scope..."
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Team Leader</label>
+                                        <select
+                                            required
+                                            value={newScope.team_leader_id}
+                                            onChange={e => setNewScope({ ...newScope, team_leader_id: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        >
+                                            <option value="">Select Leader</option>
+                                            {teamLeaders.map(tl => (
+                                                <option key={tl.id} value={tl.id}>{tl.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Deadline</label>
+                                        <input
+                                            type="date" required
+                                            value={newScope.deadline}
+                                            onChange={e => setNewScope({ ...newScope, deadline: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                                <button
+                                    type="submit" disabled={submitting}
+                                    className="w-full py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : 'Assign Scope'}
+                                </button>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+
+                {showTaskModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+                        >
+                            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-900">Create New Task</h2>
+                                    <p className="text-xs text-gray-500">Under: {activeScope?.title}</p>
+                                </div>
+                                <button onClick={() => setShowTaskModal(false)} className="p-2 rounded-xl hover:bg-gray-100"><X size={18} /></button>
+                            </div>
+                            <form onSubmit={handleCreateTask} className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Task Title</label>
+                                    <input
+                                        type="text" required
+                                        value={newTask.title}
+                                        onChange={e => setNewTask({ ...newTask, title: e.target.value })}
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        placeholder="Implement Auth Middleware"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                        {user?.role === 'manager' ? 'Assign To (Team Leader)' : 'Assignee'}
+                                    </label>
+                                    <select
+                                        required
+                                        value={newTask.assigned_to}
+                                        onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value })}
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                    >
+                                        <option value="">Select {user?.role === 'manager' ? 'Leader' : 'Developer'}</option>
+                                        {developers.map(dev => (
+                                            <option key={dev.id} value={dev.id}>{dev.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority</label>
+                                        <select
+                                            value={newTask.priority}
+                                            onChange={e => setNewTask({ ...newTask, priority: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        >
+                                            <option value="low">Low</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="high">High</option>
+                                            <option value="critical">Critical</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Due Date</label>
+                                        <input
+                                            type="date"
+                                            value={newTask.deadline}
+                                            onChange={e => setNewTask({ ...newTask, deadline: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                                <button
+                                    type="submit" disabled={submitting}
+                                    className="w-full py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : 'Create Task'}
+                                </button>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

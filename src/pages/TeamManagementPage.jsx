@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '@/services/api';
+import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/ui/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -9,6 +10,7 @@ import {
 } from 'lucide-react';
 
 export const TeamManagementPage = () => {
+    const { user } = useAuthStore();
     const toast = useToast();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -60,9 +62,11 @@ export const TeamManagementPage = () => {
                     <h1 className="text-2xl font-bold text-gray-900">Talent Hub</h1>
                     <p className="text-gray-500 mt-1">Manage human resources and team compositions</p>
                 </div>
-                <button className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-all text-sm shadow-lg shadow-indigo-100">
-                    <UserPlus size={18} /> Add Member
-                </button>
+                {user?.role === 'hr' && (
+                    <button className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-all text-sm shadow-lg shadow-indigo-100">
+                        <UserPlus size={18} /> Add Member
+                    </button>
+                )}
             </div>
 
             {/* Filters */}
@@ -83,8 +87,8 @@ export const TeamManagementPage = () => {
                             key={r}
                             onClick={() => setRoleFilter(r)}
                             className={`px-4 py-2 rounded-xl text-xs font-bold capitalize transition-all ${roleFilter === r
-                                    ? 'bg-gray-900 text-white shadow-lg shadow-gray-200'
-                                    : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'
+                                ? 'bg-gray-900 text-white shadow-lg shadow-gray-200'
+                                : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'
                                 }`}
                         >
                             {r.replace('_', ' ')}

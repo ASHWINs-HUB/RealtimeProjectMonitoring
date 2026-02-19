@@ -9,14 +9,16 @@ export const createScope = async (req, res, next) => {
         const { projectId } = req.params;
         const { title, description, team_leader_id, deadline } = req.body;
 
-        // Verify manager has accepted this project
-        const pmCheck = await pool.query(
-            `SELECT id FROM project_managers WHERE project_id = $1 AND manager_id = $2 AND status = 'accepted'`,
-            [projectId, req.user.id]
-        );
+        // Verify manager has accepted this project (Admins bypass this)
+        if (req.user.role !== 'admin') {
+            const pmCheck = await pool.query(
+                `SELECT id FROM project_managers WHERE project_id = $1 AND manager_id = $2 AND status = 'accepted'`,
+                [projectId, req.user.id]
+            );
 
-        if (pmCheck.rows.length === 0) {
-            return res.status(403).json({ success: false, message: 'You must accept this project before creating scopes' });
+            if (pmCheck.rows.length === 0) {
+                return res.status(403).json({ success: false, message: 'You must accept this project before creating scopes' });
+            }
         }
 
         // Verify team leader exists and has correct role
@@ -343,7 +345,7 @@ export const getTeams = async (req, res, next) => {
            FROM team_members tm JOIN users u ON tm.user_id = u.id WHERE tm.team_id = t.id) as members
         FROM teams t WHERE t.team_leader_id = $1 ORDER BY t.created_at DESC`;
             params = [userId];
-        } else if (role === 'manager' || role === 'hr') {
+        } else if (role === 'manager' || role === 'hr' || role === 'admin') {
             query = `
         SELECT t.*, u.name as leader_name,
           (SELECT json_agg(json_build_object('id', u2.id, 'name', u2.name, 'email', u2.email))

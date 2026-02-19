@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
+    "predev": "powershell -NoProfile -Command \"$pids = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique; if ($pids) { Stop-Process -Id $pids -Force -ErrorAction SilentlyContinue }; exit 0\"",
     "dev": "nodemon server.js",
     "migrate": "node src/migrations/run.js",
     "seed": "node src/utils/seeder.js",

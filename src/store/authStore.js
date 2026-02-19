@@ -57,7 +57,7 @@ export const useAuthStore = create(
       checkAuth: async () => {
         const token = localStorage.getItem('pp_token');
         if (!token) {
-          set({ isLoading: false, isAuthenticated: false });
+          set({ isLoading: false, isAuthenticated: false, user: null });
           return;
         }
         try {
@@ -68,7 +68,9 @@ export const useAuthStore = create(
             isLoading: false
           });
         } catch {
+          // Token is invalid or user no longer exists — clear everything
           api.logout();
+          localStorage.removeItem('pp-auth'); // Clear stale zustand persisted state
           set({
             user: null,
             isAuthenticated: false,

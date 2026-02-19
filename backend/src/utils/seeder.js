@@ -25,6 +25,7 @@ export const seedDatabase = async () => {
 
     // 1. Create Users
     const usersData = [
+      { name: 'System Admin', email: 'admin@projectpulse.io', password, role: 'admin', department: 'IT Operations' },
       { name: 'Sarah HR', email: 'hr@projectpulse.io', password, role: 'hr', department: 'Human Resources' },
       { name: 'Alex Manager', email: 'manager@projectpulse.io', password, role: 'manager', department: 'Engineering' },
       { name: 'Taylor Lead', email: 'lead@projectpulse.io', password, role: 'team_leader', department: 'Engineering' },
@@ -35,7 +36,12 @@ export const seedDatabase = async () => {
     for (const u of usersData) {
       const res = await client.query(
         `INSERT INTO users (name, email, password, role, department) 
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+         VALUES ($1, $2, $3, $4, $5) 
+         ON CONFLICT (email) DO UPDATE SET 
+           name = EXCLUDED.name,
+           role = EXCLUDED.role,
+           department = EXCLUDED.department
+         RETURNING *`,
         [u.name, u.email, u.password, u.role, u.department]
       );
       users.push(res.rows[0]);
@@ -58,7 +64,12 @@ export const seedDatabase = async () => {
     for (const p of projectsData) {
       const res = await client.query(
         `INSERT INTO projects (name, project_key, description, status, priority, progress, deadline, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+         ON CONFLICT (project_key) DO UPDATE SET
+           name = EXCLUDED.name,
+           status = EXCLUDED.status,
+           progress = EXCLUDED.progress
+         RETURNING *`,
         [p.name, p.key, `Sample project: ${p.name}`, p.status, p.priority, p.progress, p.deadline, hr.id]
       );
       projects.push(res.rows[0]);
@@ -68,7 +79,8 @@ export const seedDatabase = async () => {
     for (const p of projects) {
       await client.query(
         `INSERT INTO project_managers (project_id, manager_id, status, accepted_at)
-         VALUES ($1, $2, 'accepted', CURRENT_TIMESTAMP)`,
+         VALUES ($1, $2, 'accepted', CURRENT_TIMESTAMP)
+         ON CONFLICT (project_id, manager_id) DO UPDATE SET status = 'accepted'`,
         [p.id, manager.id]
       );
     }
@@ -76,6 +88,9 @@ export const seedDatabase = async () => {
     // 4. Create Scopes for Team Leader
     const cloudProject = projects.find(p => p.project_key === 'CLOUD');
     const phoenixProject = projects.find(p => p.project_key === 'PHOENIX');
+
+    // For simplicity, we'll use a fixed title to check for scope existence or just delete old ones
+    await client.query('DELETE FROM scopes WHERE project_id IN ($1, $2)', [cloudProject.id, phoenixProject.id]);
 
     const scopesRes = await client.query(
       `INSERT INTO scopes (project_id, assigned_by, team_leader_id, title, description, deadline)
@@ -89,6 +104,7 @@ export const seedDatabase = async () => {
     const scope2 = scopesRes.rows[1];
 
     // 5. Create Tasks for Developer
+    await client.query('DELETE FROM tasks WHERE scope_id IN ($1, $2)', [scope1.id, scope2.id]);
     await client.query(
       `INSERT INTO tasks (project_id, scope_id, title, description, status, priority, assigned_to, assigned_by, story_points, due_date)
        VALUES 
@@ -101,12 +117,14 @@ export const seedDatabase = async () => {
     // 6. Create Notifications
     await client.query(
       `INSERT INTO notifications (user_id, title, message, type)
-       VALUES ($1, 'Welcome to ProjectPulse', 'Your account has been successfully set up.', 'success')`,
+       VALUES ($1, 'Welcome to ProjectPulse', 'Your account has been successfully set up.', 'success')
+       ON CONFLICT DO NOTHING`,
       [hr.id]
     );
     await client.query(
       `INSERT INTO notifications (user_id, title, message, type)
-       VALUES ($1, 'New Project Assignment', 'You have 4 projects waiting for oversight.', 'info')`,
+       VALUES ($1, 'New Project Assignment', 'You have 4 projects waiting for oversight.', 'info')
+       ON CONFLICT DO NOTHING`,
       [manager.id]
     );
 

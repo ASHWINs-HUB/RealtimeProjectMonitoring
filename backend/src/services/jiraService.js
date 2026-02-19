@@ -116,8 +116,9 @@ class JiraService {
     }
 
     async getProjectIssues(projectKey, maxResults = 100) {
-        const jql = `project = ${projectKey} ORDER BY created DESC`;
-        return this.request('GET', `/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}`);
+        const jql = `project = "${projectKey}" ORDER BY created DESC`;
+        // Using the newer /search/jql endpoint as recommended by Jira API changelog
+        return this.request('GET', `/rest/api/3/search/jql?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}`);
     }
 
     async updateIssueStatus(issueKey, status) {
