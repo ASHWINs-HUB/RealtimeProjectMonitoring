@@ -1,7 +1,7 @@
 -- Refresh Token Table for enterprise revocation
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id SERIAL PRIMARY KEY,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     token TEXT UNIQUE NOT NULL,
     revoked BOOLEAN DEFAULT false,
     expires_at TIMESTAMP NOT NULL,

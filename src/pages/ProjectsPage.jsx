@@ -61,7 +61,7 @@ export const ProjectsPage = () => {
 
   const filteredProjects = projects.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.project_key.toLowerCase().includes(search.toLowerCase());
+      p.project_key?.toLowerCase().includes(search.toLowerCase());
     const matchesFilter = filter === 'all' || p.status === filter;
     return matchesSearch && matchesFilter;
   });

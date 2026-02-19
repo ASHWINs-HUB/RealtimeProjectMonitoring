@@ -3,6 +3,7 @@ dotenv.config();
 
 const requiredEnvVars = [
   'JWT_SECRET',
+  'JWT_REFRESH_SECRET',
   'DB_HOST',
   'DB_PORT',
   'DB_USER',
@@ -22,6 +23,7 @@ const config = {
 
   jwt: {
     secret: process.env.JWT_SECRET,
+    refreshSecret: process.env.JWT_REFRESH_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   },
 

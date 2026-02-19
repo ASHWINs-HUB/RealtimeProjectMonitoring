@@ -23,11 +23,12 @@ export const register = async (req, res, next) => {
 export const login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
-        const { user, token } = await authService.login(email, password);
+        const { user, accessToken, refreshToken } = await authService.login(email, password);
         res.json({
             success: true,
             message: 'Login successful',
-            token,
+            token: accessToken,
+            refreshToken,
             user
         });
     } catch (error) {

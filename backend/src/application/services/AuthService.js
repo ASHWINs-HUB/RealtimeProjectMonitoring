@@ -1,5 +1,6 @@
 import { userRepository } from '../../infrastructure/database/repositories/UserRepository.js';
 import { SecurityDomain } from '../../domain/services/SecurityDomain.js';
+import pool from '../../config/database.js';
 import logger from '../../utils/logger.js';
 
 export class AuthService {

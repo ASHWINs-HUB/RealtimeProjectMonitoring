@@ -125,6 +125,7 @@ class MLAnalyticsEngine {
             const riskScore = Math.round(riskProbability * 100);
 
             const confidence = [features.total_tasks > 0, features.monthly_commits > 0].filter(Boolean).length / 2;
+            const level = riskScore > 70 ? 'critical' : riskScore > 50 ? 'high' : riskScore > 30 ? 'medium' : 'low';
 
             await this.storeMetric(projectId, null, 'risk_score', riskScore, confidence, features);
 
@@ -133,7 +134,7 @@ class MLAnalyticsEngine {
 
             return {
                 score: riskScore,
-                level: riskScore > 70 ? 'critical' : riskScore > 50 ? 'high' : riskScore > 30 ? 'medium' : 'low',
+                level,
                 confidence: Math.round(confidence * 100),
                 factors: features
             };
@@ -323,6 +324,155 @@ class MLAnalyticsEngine {
         }
 
         return suggestions;
+    }
+
+    // ==================== COMPLETION FORECAST ====================
+
+    async forecastCompletion(projectId) {
+        try {
+            const features = await this.extractProjectFeatures(projectId);
+
+            const completionRate = features.completion_rate || 0;
+            const timeElapsed = features.time_elapsed_ratio || 0;
+            const daysRemaining = features.days_remaining || 90;
+
+            // Linear extrapolation based on current velocity
+            let estimatedDaysToComplete;
+            if (completionRate > 0 && timeElapsed > 0) {
+                const velocity = completionRate / Math.max(timeElapsed, 0.01);
+                const remainingWork = 1 - completionRate;
+                estimatedDaysToComplete = Math.round((remainingWork / Math.max(velocity, 0.01)) * daysRemaining / Math.max(1 - timeElapsed, 0.01));
+            } else {
+                estimatedDaysToComplete = Math.round(daysRemaining * 1.5);
+            }
+
+            const onTrack = estimatedDaysToComplete <= daysRemaining;
+            const confidence = features.total_tasks >= 5 ? 0.7 : 0.3;
+
+            await this.storeMetric(projectId, null, 'completion_forecast', estimatedDaysToComplete, confidence, features);
+
+            return {
+                estimated_days: estimatedDaysToComplete,
+                on_track: onTrack,
+                completion_rate: Math.round(completionRate * 100),
+                days_remaining: Math.round(daysRemaining),
+                confidence: Math.round(confidence * 100)
+            };
+        } catch (error) {
+            logger.error('Completion forecast failed:', error);
+            throw error;
+        }
+    }
+
+    // ==================== DASHBOARD ANALYTICS ====================
+
+    async getDashboardAnalytics(role, userId) {
+        try {
+            const result = {};
+
+            // Project health overview
+            const projects = await pool.query(
+                `SELECT p.id, p.name, p.status, p.progress, p.priority, p.deadline,
+                    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count,
+                    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'done') as done_count,
+                    (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'blocked') as blocked_count
+                 FROM projects p
+                 WHERE p.status NOT IN ('completed', 'cancelled')
+                 ORDER BY p.created_at DESC`
+            );
+
+            // Compute risk for each active project
+            const projectHealth = [];
+            for (const p of projects.rows) {
+                let riskScore = 0;
+                try {
+                    const latestMetric = await pool.query(
+                        `SELECT metric_value FROM analytics_metrics
+                         WHERE project_id = $1 AND metric_type = 'risk_score'
+                         ORDER BY computed_at DESC LIMIT 1`,
+                        [p.id]
+                    );
+                    riskScore = latestMetric.rows.length > 0 ? parseFloat(latestMetric.rows[0].metric_value) : 0;
+                } catch (_) { /* ignore */ }
+
+                projectHealth.push({
+                    id: p.id,
+                    name: p.name,
+                    status: p.status,
+                    progress: p.progress || 0,
+                    priority: p.priority,
+                    task_count: parseInt(p.task_count),
+                    done_count: parseInt(p.done_count),
+                    blocked_count: parseInt(p.blocked_count),
+                    risk_score: riskScore,
+                    risk_level: riskScore > 70 ? 'critical' : riskScore > 50 ? 'high' : riskScore > 30 ? 'medium' : 'low'
+                });
+            }
+
+            result.project_health = projectHealth;
+
+            // Risk distribution summary
+            const riskDistribution = [
+                { risk_level: 'low', count: projectHealth.filter(p => p.risk_level === 'low').length },
+                { risk_level: 'medium', count: projectHealth.filter(p => p.risk_level === 'medium').length },
+                { risk_level: 'high', count: projectHealth.filter(p => p.risk_level === 'high').length },
+                { risk_level: 'critical', count: projectHealth.filter(p => p.risk_level === 'critical').length }
+            ];
+            result.risk_distribution = riskDistribution;
+
+            // Team productivity & performance (for HR/Manager)
+            if (role === 'hr' || role === 'manager') {
+                const teamStats = await pool.query(`
+                    SELECT u.id, u.name, u.role,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id) as total_tasks,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id AND t.status = 'done') as completed_tasks,
+                        (SELECT COUNT(*) FROM tasks t WHERE t.assigned_to = u.id AND t.status != 'done') as active_tasks
+                    FROM users u
+                    WHERE u.role IN ('developer', 'team_leader') AND u.is_active = true
+                    ORDER BY u.name
+                `);
+                result.team_productivity = teamStats.rows.map(m => ({
+                    ...m,
+                    completion_rate: parseInt(m.total_tasks) > 0
+                        ? Math.round((parseInt(m.completed_tasks) / parseInt(m.total_tasks)) * 100)
+                        : 0
+                }));
+
+                // Build team_performance array expected by the AnalyticsPage frontend
+                result.team_performance = teamStats.rows.map(m => {
+                    const total = parseInt(m.total_tasks) || 0;
+                    const completed = parseInt(m.completed_tasks) || 0;
+                    const active = parseInt(m.active_tasks) || 0;
+                    const performanceScore = total > 0 ? Math.round((completed / total) * 100) : 0;
+                    // Estimate burnout from active task count
+                    const burnoutScore = Math.min(100, active * 10);
+                    return {
+                        id: m.id,
+                        name: m.name,
+                        role: m.role,
+                        performance_score: performanceScore,
+                        burnout_score: burnoutScore
+                    };
+                });
+            }
+
+            // Overall summary stats
+            const overallStats = await pool.query(`
+                SELECT
+                    (SELECT COUNT(*) FROM projects) as total_projects,
+                    (SELECT COUNT(*) FROM projects WHERE status NOT IN ('completed', 'cancelled')) as active_projects,
+                    (SELECT COUNT(*) FROM tasks) as total_tasks,
+                    (SELECT COUNT(*) FROM tasks WHERE status = 'done') as completed_tasks,
+                    (SELECT COUNT(*) FROM tasks WHERE status = 'blocked') as blocked_tasks,
+                    (SELECT COALESCE(AVG(progress), 0) FROM projects WHERE status NOT IN ('completed', 'cancelled')) as avg_progress
+            `);
+            result.summary = overallStats.rows[0];
+
+            return result;
+        } catch (error) {
+            logger.error('Dashboard analytics failed:', error);
+            throw error;
+        }
     }
 
     // ==================== UTILITIES ====================

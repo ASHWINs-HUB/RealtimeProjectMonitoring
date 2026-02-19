@@ -16,7 +16,7 @@ export class SecurityDomain {
         return jwt.sign(
             { id: payload.id, email: payload.email, role: payload.role, name: payload.name },
             config.jwt.secret,
-            { expiresIn: '15m' } // Short-lived access token
+            { expiresIn: config.jwt.expiresIn }
         );
     }
 

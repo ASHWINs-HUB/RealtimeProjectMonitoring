@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import {
   BarChart3, TrendingUp, AlertTriangle, CheckCircle2,
   Zap, Activity, Target, PieChart, ArrowUpRight,
-  ChevronRight, Calendar, Info, RefreshCw
+  ChevronRight, Calendar, Info, RefreshCw, Users
 } from 'lucide-react';
 
 export const AnalyticsPage = () => {

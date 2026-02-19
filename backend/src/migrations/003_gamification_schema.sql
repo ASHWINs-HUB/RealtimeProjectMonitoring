@@ -3,12 +3,12 @@
 -- User Skills Matrix
 CREATE TABLE IF NOT EXISTS user_skills (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     skill_name VARCHAR(50) NOT NULL,
     proficiency_level INTEGER DEFAULT 1, -- 1 to 10
     total_xp INTEGER DEFAULT 0,
     verified BOOLEAN DEFAULT FALSE,
-    last_updated AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, skill_name)
 );
 
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS achievements (
 -- User Earned Achievements
 CREATE TABLE IF NOT EXISTS user_achievements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     achievement_id UUID REFERENCES achievements(id) ON DELETE CASCADE,
     earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, achievement_id)
@@ -35,9 +35,9 @@ CREATE TABLE IF NOT EXISTS user_achievements (
 -- Activity Logs for XP/Badge calculation
 CREATE TABLE IF NOT EXISTS activity_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     action_type VARCHAR(50) NOT NULL, -- 'PR_MERGED', 'TASK_CLOSED', 'BUG_RESOLVED'
-    entity_id UUID, -- References task_id or commit_id
+    entity_id INTEGER, -- References task_id or commit_id
     xp_gained INTEGER DEFAULT 0,
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

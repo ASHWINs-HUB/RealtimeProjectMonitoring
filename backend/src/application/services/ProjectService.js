@@ -2,7 +2,7 @@ import { projectRepository } from '../../infrastructure/database/repositories/Pr
 import { jiraClient } from '../../infrastructure/external/JiraClient.js';
 import { githubClient } from '../../infrastructure/external/GitHubClient.js';
 import { taskRepository } from '../../infrastructure/database/repositories/TaskRepository.js';
-import pool from '../../../config/database.js';
+import pool from '../../config/database.js';
 import logger from '../../utils/logger.js';
 
 export class ProjectService {

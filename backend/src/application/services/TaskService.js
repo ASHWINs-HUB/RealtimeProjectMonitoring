@@ -3,7 +3,7 @@ import { jiraClient } from '../../infrastructure/external/JiraClient.js';
 import { githubClient } from '../../infrastructure/external/GitHubClient.js';
 import { gamificationService } from './GamificationService.js';
 import { jiraRepository } from '../../infrastructure/database/repositories/JiraRepository.js';
-import pool from '../../../config/database.js';
+import pool from '../../config/database.js';
 import logger from '../../utils/logger.js';
 
 export class TaskService {
@@ -137,6 +137,17 @@ export class TaskService {
         });
 
         return { branchName, branchUrl };
+    }
+
+    _dispatchGamificationEvent(userId, actionType, data) {
+        // Fire-and-forget gamification processing (non-blocking)
+        (async () => {
+            try {
+                await gamificationService.handleEvent(userId, actionType, data);
+            } catch (err) {
+                logger.warn(`Gamification event dispatch failed: ${err.message}`);
+            }
+        })();
     }
 
     _guessSkillFromTitle(title) {
