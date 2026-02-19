@@ -156,6 +156,12 @@ class ApiService {
     });
   }
 
+  async createBranch(taskId) {
+    return this.request(`/tasks/${taskId}/create-branch`, {
+      method: 'POST',
+    });
+  }
+
   // ============ TEAMS ============
   async getTeams() {
     return this.request('/teams');

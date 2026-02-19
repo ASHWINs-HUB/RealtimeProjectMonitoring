@@ -93,21 +93,27 @@ A modern, production-ready SaaS dashboard UI built with React, featuring role-ba
 - Pull request monitoring
 - Performance metrics
 
-## 📁 Project Structure
+## 🏗️ Enterprise Architecture (Refactored)
 
-```
-src/
-├── components/
-│   └── ui/                 # Reusable UI components
-├── layouts/                # Layout components
-├── pages/                  # Page components
-├── features/               # Feature-specific components
-├── services/              # API services
-├── hooks/                 # Custom React hooks
-├── store/                 # State management
-├── styles/                # Global styles
-└── utils/                 # Utility functions
-```
+The project follows **Clean Architecture** patterns for scalability and testability:
+
+### backend/src/
+- **domain/**: Pure business logic and mathematical models (ML Predictions, Security Rules).
+- **application/services/**: Orchestrators that handle complex workflows (Syncing, Analytics, Auth).
+- **infrastructure/**: 
+    - **external/**: Resilient API clients for GitHub and Jira.
+    - **database/repositories/**: Decoupled data persistence layer using Repository Pattern.
+- **api/**: Standard Express controllers and role-based middlewares.
+
+### Gamification Engine
+- Real-time XP tracking for engineering events.
+- Skill matrix progression (Frontend, Backend, DevOps, QA).
+- Badge & Achievement rewarding.
+
+### ML Predictive Pipeline
+- **Risk Scoring**: Real-time project risk identification.
+- **Burnout Detection**: Early warning system for developer wellness.
+- **Velocity Forecasting**: AI-driven sprint delivery predictions.
 
 ## 🎯 Component Standards
 

@@ -138,6 +138,20 @@ class GitHubService {
     });
   }
 
+  // ==================== BRANCHES ====================
+
+  async getReference(owner, repo, ref) {
+    // ref example: 'heads/main'
+    return this.request('GET', `/repos/${owner}/${repo}/git/ref/${ref}`);
+  }
+
+  async createBranch(owner, repo, branchName, sha) {
+    return this.request('POST', `/repos/${owner}/${repo}/git/refs`, {
+      ref: `refs/heads/${branchName}`,
+      sha
+    });
+  }
+
   // ==================== SYNC COMMITS TO DB ====================
 
   async syncCommitsToDb(projectId) {

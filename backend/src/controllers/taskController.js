@@ -1,6 +1,7 @@
 import pool from '../config/database.js';
 import logger from '../utils/logger.js';
 import { jiraService } from '../services/jiraService.js';
+import { githubService } from '../services/githubService.js';
 
 // POST /api/projects/:projectId/scopes - Manager creates scope for team leader
 export const createScope = async (req, res, next) => {
@@ -162,6 +163,65 @@ export const getAssignedTasks = async (req, res, next) => {
         );
 
         res.json({ success: true, tasks: result.rows });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// POST /api/tasks/:taskId/create-branch
+export const createTaskBranch = async (req, res, next) => {
+    try {
+        const { taskId } = req.params;
+
+        // 1. Fetch task and its mappings
+        const taskResult = await pool.query(`
+            SELECT t.*, jm.jira_issue_key, gm.repo_full_name, p.project_key
+            FROM tasks t
+            LEFT JOIN jira_mapping jm ON t.id = jm.task_id
+            JOIN github_mapping gm ON t.project_id = gm.project_id
+            JOIN projects p ON t.project_id = p.id
+            WHERE t.id = $1
+        `, [taskId]);
+
+        if (taskResult.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Task or GitHub mapping not found' });
+        }
+
+        const task = taskResult.rows[0];
+        if (task.github_branch) {
+            return res.status(400).json({ success: false, message: 'Branch already exists for this task' });
+        }
+
+        const [owner, repo] = task.repo_full_name.split('/');
+        const jiraPart = task.jira_issue_key || `${task.project_key}-${task.id}`;
+        const slug = task.title.toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '');
+        const branchName = `feature/${jiraPart}-${slug}`;
+
+        // 2. Get default branch SHA
+        const repoData = await githubService.getRepository(owner, repo);
+        const defaultBranch = repoData.default_branch;
+        const refData = await githubService.getReference(owner, repo, `heads/${defaultBranch}`);
+        const baseSHA = refData.object.sha;
+
+        // 3. Create branch
+        await githubService.createBranch(owner, repo, branchName, baseSHA);
+
+        const branchUrl = `https://github.com/${owner}/${repo}/tree/${branchName}`;
+
+        // 4. Update task
+        await pool.query(
+            'UPDATE tasks SET github_branch = $1, github_branch_url = $2 WHERE id = $3',
+            [branchName, branchUrl, taskId]
+        );
+
+        res.json({
+            success: true,
+            branchName,
+            branchUrl,
+            prLink: `https://github.com/${owner}/${repo}/compare/${branchName}?expand=1`
+        });
     } catch (error) {
         next(error);
     }

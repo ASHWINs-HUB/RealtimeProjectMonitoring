@@ -19,12 +19,12 @@ if (missingVars.length > 0) {
 const config = {
   port: parseInt(process.env.PORT) || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
-  
+
   jwt: {
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   },
-  
+
   db: {
     host: process.env.DB_HOST,
     port: parseInt(process.env.DB_PORT) || 5432,
@@ -35,28 +35,28 @@ const config = {
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000
   },
-  
+
   github: {
     token: process.env.GITHUB_TOKEN,
     org: process.env.GITHUB_ORG || 'personal',
     apiUrl: 'https://api.github.com'
   },
-  
+
   jira: {
-    baseUrl: process.env.JIRA_BASE_URL,
-    email: process.env.JIRA_EMAIL,
-    apiToken: process.env.JIRA_API_TOKEN
+    baseUrl: (process.env.JIRA_BASE_URL || '').trim(),
+    email: (process.env.JIRA_EMAIL || '').trim(),
+    apiToken: (process.env.JIRA_API_TOKEN || '').trim()
   },
-  
+
   webhook: {
     secret: process.env.WEBHOOK_SECRET
   },
-  
+
   ml: {
     retrainCron: process.env.ML_RETRAIN_CRON || '0 */6 * * *',
     minSamples: parseInt(process.env.ML_MIN_SAMPLES) || 5
   },
-  
+
   cors: {
     origins: process.env.NODE_ENV === 'production'
       ? [process.env.FRONTEND_URL]

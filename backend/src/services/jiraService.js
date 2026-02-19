@@ -5,25 +5,36 @@ import logger from '../utils/logger.js';
 class JiraService {
     constructor() {
         this.baseUrl = config.jira.baseUrl;
-        this.auth = {
-            username: config.jira.email,
-            password: config.jira.apiToken
-        };
-        this.headers = {
-            Accept: 'application/json',
-            'Content-Type': 'application/json'
-        };
     }
 
     async request(method, endpoint, data = null) {
+        const email = (process.env.JIRA_EMAIL || config.jira.email || '').trim();
+        const token = (process.env.JIRA_API_TOKEN || config.jira.apiToken || '').trim();
+        const authString = Buffer.from(`${email}:${token}`).toString('base64');
+
+        const headers = {
+            'Authorization': `Basic ${authString}`,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'ProjectPulse-Server'
+        };
+
+        const fullUrl = `${this.baseUrl}${endpoint}`;
+
         try {
-            const response = await axios({
-                method,
-                url: `${this.baseUrl}${endpoint}`,
-                auth: this.auth,
-                headers: this.headers,
-                data
-            });
+            let response;
+            const axiosConfig = { headers };
+
+            if (method.toLowerCase() === 'get') {
+                response = await axios.get(fullUrl, axiosConfig);
+            } else if (method.toLowerCase() === 'post') {
+                response = await axios.post(fullUrl, data, axiosConfig);
+            } else if (method.toLowerCase() === 'put') {
+                response = await axios.put(fullUrl, data, axiosConfig);
+            } else if (method.toLowerCase() === 'delete') {
+                response = await axios.delete(fullUrl, axiosConfig);
+            }
+
             return response.data;
         } catch (error) {
             const data = error.response?.data;

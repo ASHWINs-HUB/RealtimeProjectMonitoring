@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import { SecurityDomain } from '../domain/services/SecurityDomain.js';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 
@@ -15,7 +15,7 @@ export const authenticateToken = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, config.jwt.secret);
+    const decoded = SecurityDomain.verifyToken(token);
     req.user = decoded;
     next();
   } catch (error) {
@@ -43,7 +43,7 @@ export const authorizeRoles = (...allowedRoles) => {
       });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    if (!SecurityDomain.hasPermission(req.user.role, allowedRoles)) {
       logger.warn(`Access denied for user ${req.user.id} (role: ${req.user.role}) to resource requiring roles: ${allowedRoles.join(', ')}`);
       return res.status(403).json({
         success: false,
@@ -85,16 +85,8 @@ export const validateWebhookAuth = (req, res, next) => {
   next();
 };
 
-// Generate JWT token
+// Generate JWT token (Deprecated, use SecurityDomain directly)
 export const generateToken = (user) => {
-  return jwt.sign(
-    {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      name: user.name
-    },
-    config.jwt.secret,
-    { expiresIn: config.jwt.expiresIn }
-  );
+  return SecurityDomain.generateToken(user);
 };
+

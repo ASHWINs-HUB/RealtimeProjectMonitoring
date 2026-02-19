@@ -135,6 +135,28 @@ export const triggerBatchCompute = async (req, res, next) => {
     }
 };
 
+// GET /api/analytics/recommend-managers
+export const getManagerRecommendations = async (req, res, next) => {
+    try {
+        const priority = req.query.priority || 'medium';
+        const recommendations = await mlAnalytics.recommendManagers(priority);
+        res.json({ success: true, recommendations });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// GET /api/analytics/suggest-tasks
+export const suggestTaskBreakdown = async (req, res, next) => {
+    try {
+        const { title, description } = req.query;
+        const suggestions = await mlAnalytics.suggestTaskBreakdown(title, description);
+        res.json({ success: true, suggestions });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // GET /api/analytics/insights
 export const getInsights = async (req, res, next) => {
     try {

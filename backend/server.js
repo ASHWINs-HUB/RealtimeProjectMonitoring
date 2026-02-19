@@ -23,7 +23,8 @@ import analyticsRoutes from './src/routes/analyticsRoutes.js';
 
 // Services
 import { mlAnalytics } from './src/services/mlAnalytics.js';
-import { syncService } from './src/services/syncService.js';
+import { analyticsService } from './src/application/services/AnalyticsService.js';
+import { syncOrchestrator } from './src/application/services/SyncOrchestrator.js';
 
 const app = express();
 const server = createServer(app);
@@ -136,10 +137,9 @@ const startServer = async () => {
 
     // Start ML cron job
     cron.schedule(config.ml.retrainCron, async () => {
-      logger.info('Running scheduled ML metrics computation...');
       try {
-        await syncService.syncAll();
-        await mlAnalytics.computeAllMetrics();
+        await syncOrchestrator.syncAllProjects();
+        await analyticsService.runBatchCompute();
       } catch (e) {
         logger.error('Scheduled ML computation failed:', e);
       }
@@ -147,16 +147,15 @@ const startServer = async () => {
 
     // Start Real-time Integration Sync (Every 5 minutes)
     cron.schedule('*/5 * * * *', async () => {
-      logger.info('Running scheduled integration sync...');
       try {
-        await syncService.syncAll();
+        await syncOrchestrator.syncAllProjects();
       } catch (e) {
         logger.error('Scheduled sync failed:', e);
       }
     });
 
     // Start server
-    server.listen(config.port, () => {
+    server.listen(config.port, '0.0.0.0', () => {
       logger.info(`🚀 ProjectPulse API v2.0.0 running on port ${config.port}`);
       logger.info(`📊 Health check: http://localhost:${config.port}/api/health`);
       logger.info(`🤖 ML Cron: ${config.ml.retrainCron}`);

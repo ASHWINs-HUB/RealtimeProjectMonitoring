@@ -8,7 +8,8 @@ import {
 import {
   createScope, getScopes, createTask, getAssignedTasks,
   updateTaskStatus, getProjectTasks, getTeams, createTeam,
-  getNotifications, markNotificationRead, markAllNotificationsRead
+  getNotifications, markNotificationRead, markAllNotificationsRead,
+  createTaskBranch
 } from '../controllers/taskController.js';
 
 const router = Router();
@@ -34,8 +35,9 @@ router.get('/projects/:projectId/scopes', authorizeRoles('hr', 'manager', 'team_
 // ============ TASK ROUTES ============
 router.post('/projects/:projectId/tasks', authorizeRoles('team_leader'), validateCreateTask, createTask);
 router.get('/projects/:projectId/tasks', getProjectTasks);
-router.get('/tasks/assigned', authorizeRoles('developer'), getAssignedTasks);
+router.get('/tasks/assigned', authorizeRoles('developer', 'team_leader'), getAssignedTasks);
 router.put('/tasks/:taskId/status', authorizeRoles('developer', 'team_leader'), validateUpdateTaskStatus, updateTaskStatus);
+router.post('/tasks/:taskId/create-branch', authorizeRoles('developer', 'team_leader'), createTaskBranch);
 
 // ============ TEAM ROUTES ============
 router.get('/teams', getTeams);

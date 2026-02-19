@@ -4,7 +4,8 @@ import {
     getDashboardAnalytics, getProjectRisk, getSprintDelay,
     getCompletionForecast, getDeveloperPerformance, getBurnoutScore,
     getJiraAnalytics, getGithubAnalytics, syncGithubCommits,
-    triggerBatchCompute, getInsights
+    triggerBatchCompute, getInsights, getManagerRecommendations,
+    suggestTaskBreakdown
 } from '../controllers/analyticsController.js';
 
 const router = Router();
@@ -25,6 +26,10 @@ router.post('/project/:projectId/sync-commits', authorizeRoles('hr', 'manager'),
 router.get('/developer/:userId/performance', authorizeRoles('hr', 'manager', 'team_leader', 'developer'), getDeveloperPerformance);
 router.get('/developer/:userId/burnout', authorizeRoles('hr', 'manager', 'team_leader'), getBurnoutScore);
 router.get('/my-performance', authorizeRoles('developer'), getDeveloperPerformance);
+
+// Recommendations & Assistance
+router.get('/recommend-managers', authorizeRoles('hr', 'manager'), getManagerRecommendations);
+router.get('/suggest-tasks', authorizeRoles('hr', 'manager', 'team_leader'), suggestTaskBreakdown);
 
 // Insights
 router.get('/insights', getInsights);
