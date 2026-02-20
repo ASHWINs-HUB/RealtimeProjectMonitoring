@@ -14,6 +14,7 @@ import { AnalyticsPage } from '@/pages/AnalyticsPage';
 import { InsightsPage } from '@/pages/InsightsPage';
 import { MyScorePage } from '@/pages/MyScorePage';
 import { TeamManagementPage } from '@/pages/TeamManagementPage';
+import { SmartDashboard } from '@/pages/SmartDashboard';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Page transition wrapper
@@ -58,15 +59,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
 // Simple Dashboard Router
 const DashboardRouter = () => {
-  const { user } = useAuthStore();
-
-  switch (user?.role) {
-    case 'hr': return <HRDashboard />;
-    case 'manager': return <ManagerDashboard />;
-    case 'team_leader': return <TeamLeaderDashboard />;
-    case 'developer': return <DeveloperDashboard />;
-    default: return <Navigate to="/login" />;
-  }
+  return <SmartDashboard />;
 };
 
 const App = () => {
@@ -88,7 +81,7 @@ const App = () => {
           <Route path="/team" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><PageTransition><TeamManagementPage /></PageTransition></ProtectedRoute>} />
 
           <Route path="/tasks" element={<ProtectedRoute allowedRoles={['developer', 'team_leader']}><PageTransition><DeveloperDashboard /></PageTransition></ProtectedRoute>} />
-          <Route path="/my-score" element={<ProtectedRoute allowedRoles={['developer']}><PageTransition><MyScorePage /></PageTransition></ProtectedRoute>} />
+          <Route path="/my-score" element={<ProtectedRoute allowedRoles={['developer', 'team_leader', 'admin']}><PageTransition><MyScorePage /></PageTransition></ProtectedRoute>} />
 
           {/* Fallback to Dashboard */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

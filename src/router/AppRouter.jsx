@@ -23,6 +23,7 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { TeamPage } from '@/pages/TeamPage';
 import { AdminDashboard } from '@/pages/AdminDashboard';
 import { StakeholderDashboard } from '@/pages/StakeholderDashboard';
+import { ManagerManagementPage } from '@/pages/ManagerManagementPage';
 
 const AnalyticsRouter = () => {
   const { user } = useAuthStore();
@@ -88,6 +89,7 @@ export const AppRouter = () => {
 
         {/* Team/User Management */}
         <Route path="/team" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><TeamManagementPage /></ProtectedRoute>} />
+        <Route path="/managers" element={<ProtectedRoute allowedRoles={['hr']}><ManagerManagementPage /></ProtectedRoute>} />
         <Route path="/team-members" element={<ProtectedRoute allowedRoles={['team_leader']}><TeamPage /></ProtectedRoute>} />
         <Route path="/team-analytics" element={<AnalyticsRouter />} />
 

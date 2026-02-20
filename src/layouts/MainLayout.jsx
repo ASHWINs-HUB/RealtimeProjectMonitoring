@@ -5,8 +5,10 @@ import { useNotificationStore } from '@/store/notificationStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   GitBranch, Zap, Shield, Briefcase, FolderKanban, BarChart3, Settings,
-  Home, Users, Lightbulb, CheckSquare, X, LogOut, Bell, Menu
+  Home, Users, Lightbulb, CheckSquare, X, LogOut, Bell, Menu,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
+import { RoleSwitcher, ProfileDropdown } from '@/components/dashboard/TopBarActions';
 
 // Role-based navigation configuration
 const ROLE_NAV = {
@@ -103,25 +105,31 @@ export const MainLayout = ({ children }) => {
 
       {/* Sidebar */}
       <aside className={`
-        fixed inset-y-0 left-0 z-50 w-[280px] bg-white border-r border-gray-200
-        transform transition-transform duration-300 ease-in-out
-        lg:translate-x-0 lg:static lg:inset-auto
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        fixed inset-y-0 left-0 z-50 w-[260px] bg-white border-r border-gray-100/80
+        transform transition-all duration-500 ease-in-out
+        lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen flex-shrink-0
+        ${sidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0 lg:w-[80px]'}
       `}>
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full bg-slate-50/30">
           {/* Brand */}
-          <div className="p-5 border-b border-gray-100">
+          <div className="p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 bg-gradient-to-br ${roleColors[user?.role] || 'from-indigo-500 to-purple-600'} rounded-xl flex items-center justify-center shadow-lg`}>
-                  <Zap size={20} className="text-white" />
+                <div className={`w-9 h-9 bg-gradient-to-br ${roleColors[user?.role] || 'from-indigo-600 to-violet-600'} rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100 flex-shrink-0 transition-transform duration-500 ${!sidebarOpen && 'lg:scale-90 lg:-translate-x-1'}`}>
+                  <Zap size={18} className="text-white fill-current" />
                 </div>
-                <div>
-                  <h1 className="text-lg font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                    ProjectPulse
-                  </h1>
-                  <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">AI Platform</p>
-                </div>
+                {sidebarOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="overflow-hidden whitespace-nowrap"
+                  >
+                    <h1 className="text-base font-black tracking-tight text-slate-800">
+                      ProjectPulse
+                    </h1>
+                    <p className="text-[10px] font-extrabold text-indigo-500 uppercase tracking-widest leading-none">AI Hub</p>
+                  </motion.div>
+                )}
               </div>
               <button
                 onClick={() => setSidebarOpen(false)}
@@ -133,11 +141,11 @@ export const MainLayout = ({ children }) => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-3 overflow-y-auto">
-            <p className="px-3 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-              Navigation
+          <nav className="flex-1 px-4 py-2 overflow-y-auto custom-scrollbar">
+            <p className={`px-3 py-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ${!sidebarOpen && 'lg:hidden'}`}>
+              Console
             </p>
-            <ul className="space-y-1">
+            <ul className="space-y-1 mt-2">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path
@@ -149,23 +157,31 @@ export const MainLayout = ({ children }) => {
                       to={item.path}
                       onClick={() => setSidebarOpen(false)}
                       className={`
-                        flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                        flex items-center gap-3 px-3 py-2.5 rounded-2xl text-[13px] font-bold transition-all duration-300 group
                         ${isActive
-                          ? 'bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-700 shadow-sm'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          ? 'bg-white text-indigo-600 shadow-sm border border-slate-100'
+                          : 'text-slate-500 hover:text-indigo-600 hover:bg-white/50'
                         }
                       `}
                     >
                       <div className={`
-                        w-8 h-8 rounded-lg flex items-center justify-center transition-colors
-                        ${isActive ? 'bg-indigo-100' : 'bg-gray-100 group-hover:bg-gray-200'}
+                        w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 flex-shrink-0
+                        ${isActive ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 group-hover:bg-indigo-50 group-hover:text-indigo-600 text-slate-400'}
                       `}>
-                        <Icon size={16} className={isActive ? 'text-indigo-600' : 'text-gray-500'} />
+                        <Icon size={16} className="transition-transform group-hover:scale-110" />
                       </div>
-                      <span>{item.label}</span>
+                      {sidebarOpen && (
+                        <motion.span
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="tracking-tight whitespace-nowrap"
+                        >
+                          {item.label}
+                        </motion.span>
+                      )}
                       {isActive && (
                         <motion.div
-                          layoutId="active-indicator"
+                          layoutId="active-nav-indicator"
                           className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-500"
                         />
                       )}
@@ -177,100 +193,105 @@ export const MainLayout = ({ children }) => {
           </nav>
 
           {/* User section */}
-          <div className="p-4 border-t border-gray-100">
-            <div className="flex items-center gap-3 mb-3">
-              <div className={`w-10 h-10 bg-gradient-to-br ${roleColors[user?.role] || 'from-gray-400 to-gray-500'} rounded-full flex items-center justify-center shadow-inner`}>
-                <span className="text-white font-semibold text-sm">
+          <div className={`p-4 mx-4 mb-6 bg-white rounded-3xl border border-slate-100 shadow-sm transition-all duration-500 overflow-hidden ${!sidebarOpen && 'lg:mx-2 lg:p-2 lg:rounded-2xl'}`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-10 h-10 bg-gradient-to-br ${roleColors[user?.role] || 'from-gray-400 to-gray-500'} rounded-2xl rotate-3 flex items-center justify-center shadow-lg flex-shrink-0`}>
+                <span className="text-white font-black text-xs -rotate-3">
                   {user?.name?.[0]?.toUpperCase() || '?'}
                 </span>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">{user?.name}</p>
-                <p className="text-xs text-gray-500">{roleLabels[user?.role]}</p>
-              </div>
+              {sidebarOpen && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black text-slate-800 truncate">{user?.name}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase truncate">{roleLabels[user?.role]}</p>
+                </div>
+              )}
             </div>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors"
+              className={`w-full flex items-center justify-center gap-2 text-xs font-black text-rose-500 bg-rose-50/50 hover:bg-rose-50 rounded-2xl transition-all border border-transparent hover:border-rose-100 ${sidebarOpen ? 'px-3 py-2.5' : 'p-2.5'}`}
             >
-              <LogOut size={16} />
-              Sign Out
+              <LogOut size={14} />
+              {sidebarOpen && "LOGOUT"}
             </button>
           </div>
         </div>
       </aside>
 
       {/* Main content area */}
-      <div className="lg:ml-0 flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-h-screen min-w-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-gray-200/80 px-4 py-3 sm:px-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-gray-100/50 h-20 flex items-center px-4 sm:px-8">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-4">
               <button
-                onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 rounded-xl hover:bg-gray-100 transition-colors"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="p-2.5 rounded-2xl bg-slate-50 text-slate-600 hover:bg-slate-100 transition-all border border-slate-200/50 group shadow-inner"
                 id="sidebar-toggle"
               >
-                <Menu size={20} className="text-gray-600" />
+                {sidebarOpen ? <ChevronLeft size={18} className="group-hover:-translate-x-0.5 transition-transform" /> : <Menu size={18} />}
               </button>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {navItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
-                </h2>
-                <p className="text-xs text-gray-500 hidden sm:block">
-                  {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
+              <div className="flex items-center gap-3">
+                <div className="h-8 w-[2px] bg-slate-200 hidden lg:block rounded-full" />
+                <div>
+                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">
+                    {navItems.find(item => item.path === location.pathname)?.label || 'Overview'}
+                  </h2>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
+              <RoleSwitcher />
+
+              <div className="h-6 w-px bg-slate-100 mx-2 hidden sm:block" />
+
               {/* Notification bell */}
               <div className="relative">
                 <button
                   onClick={() => setNotifOpen(!notifOpen)}
-                  className="relative p-2 rounded-xl hover:bg-gray-100 transition-colors"
+                  className="relative p-2.5 rounded-2xl bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all group"
                   id="notification-bell"
                 >
-                  <Bell size={20} className="text-gray-600" />
+                  <Bell size={20} className="group-hover:rotate-12 transition-transform" />
                   {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
+                    <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-white ring-4 ring-rose-500/10" />
                   )}
                 </button>
 
-                {/* Notification dropdown */}
                 <AnimatePresence>
                   {notifOpen && (
                     <motion.div
-                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                      className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden z-50"
+                      initial={{ opacity: 0, scale: 0.95, y: -20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: -20 }}
+                      className="absolute right-0 mt-4 w-80 bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-20"
                     >
-                      <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900">Notifications</h3>
+                      <div className="p-4 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Risk Alerts</h3>
                         {unreadCount > 0 && (
                           <button
                             onClick={() => { markAllAsRead(); }}
-                            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                            className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-tighter"
                           >
                             Mark all read
                           </button>
                         )}
                       </div>
-                      <div className="max-h-80 overflow-y-auto">
+                      <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
                         {notifications.length === 0 ? (
-                          <div className="p-8 text-center text-gray-400">
-                            <Bell size={32} className="mx-auto mb-2 opacity-30" />
-                            <p className="text-sm">No notifications yet</p>
+                          <div className="p-10 text-center">
+                            <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                              <Bell size={20} className="text-slate-300" />
+                            </div>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">No active threats</p>
                           </div>
                         ) : (
                           notifications.slice(0, 10).map(notif => (
                             <div
                               key={notif.id}
-                              className={`p-3 border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors
-                                ${!notif.is_read ? 'bg-indigo-50/50' : ''}
+                              className={`p-4 border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors
+                                ${!notif.is_read ? 'bg-indigo-50/30' : ''}
                               `}
                               onClick={() => {
                                 markAsRead(notif.id);
@@ -278,10 +299,10 @@ export const MainLayout = ({ children }) => {
                                 setNotifOpen(false);
                               }}
                             >
-                              <p className="text-sm font-medium text-gray-900">{notif.title}</p>
-                              <p className="text-xs text-gray-500 mt-0.5">{notif.message}</p>
-                              <p className="text-[10px] text-gray-400 mt-1">
-                                {new Date(notif.created_at).toLocaleString()}
+                              <p className="text-[13px] font-bold text-slate-900 leading-snug">{notif.title}</p>
+                              <p className="text-[11px] text-slate-500 font-medium mt-1 line-clamp-2">{notif.message}</p>
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-tighter mt-2">
+                                {new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </p>
                             </div>
                           ))
@@ -291,16 +312,138 @@ export const MainLayout = ({ children }) => {
                   )}
                 </AnimatePresence>
               </div>
+
+              <div className="h-6 w-px bg-slate-100 mx-2 hidden sm:block" />
+
+              <ProfileDropdown />
             </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 pt-0 px-4 pb-4 sm:pt-0 sm:px-6 sm:pb-6 lg:pt-0 lg:px-8 lg:pb-8">
           <div className="max-w-7xl mx-auto">
             {children || <Outlet />}
           </div>
         </main>
+
+        {/* Professional Dark Footer */}
+        <footer className="mt-auto bg-[#040405] border-t border-slate-800/30 pt-16 pb-8 px-8 overflow-hidden relative">
+          {/* Subtle Indigo Glow background accent */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[1px] bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
+
+          <div className="max-w-7xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mb-16">
+              {/* Brand Section */}
+              <div className="md:col-span-4 space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <Zap size={20} className="text-white fill-current" />
+                  </div>
+                  <h1 className="text-xl font-black tracking-tight text-white uppercase flex flex-col leading-none">
+                    ProjectPulse
+                    <span className="text-[10px] text-indigo-400 tracking-[0.4em] font-black mt-1">AI HUB</span>
+                  </h1>
+                </div>
+                <p className="text-sm font-medium text-slate-400 leading-relaxed max-w-sm">
+                  The ultimate command center for modern engineering teams.
+                  Leveraging predictive ML to turn raw development data into actionable delivery insights.
+                </p>
+                <div className="flex items-center gap-4 pt-2">
+                  <a href="#" className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white hover:border-slate-600 transition-all">
+                    <GitBranch size={16} />
+                  </a>
+                  <a href="#" className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white hover:border-slate-600 transition-all">
+                    <Briefcase size={16} />
+                  </a>
+                  <a href="#" className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white hover:border-slate-600 transition-all">
+                    <CheckSquare size={16} />
+                  </a>
+                </div>
+              </div>
+
+              {/* Navigation Group 1 */}
+              <div className="md:col-span-2 space-y-6">
+                <h4 className="text-[11px] font-black text-white uppercase tracking-widest border-l-2 border-indigo-600 pl-3">Ecosystem</h4>
+                <ul className="space-y-3">
+                  {[
+                    { label: 'Portfolio View', icon: FolderKanban },
+                    { label: 'ML Analytics', icon: BarChart3 },
+                    { label: 'Team Pulse', icon: Users },
+                    { label: 'Smart Insights', icon: Lightbulb }
+                  ].map(link => (
+                    <li key={link.label}>
+                      <a href="#" className="flex items-center gap-2 text-[13px] font-bold text-slate-500 hover:text-indigo-400 transition-colors group">
+                        <link.icon size={12} className="opacity-50 group-hover:opacity-100" />
+                        {link.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Navigation Group 2 */}
+              <div className="md:col-span-2 space-y-6">
+                <h4 className="text-[11px] font-black text-white uppercase tracking-widest border-l-2 border-indigo-600 pl-3">Solutions</h4>
+                <ul className="space-y-3 font-bold">
+                  {['Jira Real-time', 'GitHub Webhooks', 'Risk Prediction', 'Resource Loading'].map(item => (
+                    <li key={item}>
+                      <a href="#" className="text-[13px] text-slate-500 hover:text-white transition-colors">
+                        {item}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Status Section */}
+              <div className="md:col-span-4 space-y-6">
+                <h4 className="text-[11px] font-black text-white uppercase tracking-widest border-l-2 border-indigo-600 pl-3">Infrastructure</h4>
+                <div className="space-y-4">
+                  <div className="bg-[#0e0e11] border border-slate-800/60 rounded-2xl p-5 shadow-inner">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">System Engine v4.0</span>
+                      </div>
+                      <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full uppercase">Operational</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center text-[10px] font-black text-slate-500 uppercase">
+                        <span>API Latency</span>
+                        <span className="text-white">42ms</span>
+                      </div>
+                      <div className="w-full h-1 bg-slate-800/50 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-500 w-[94%]" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-8 border-t border-slate-800/40 flex flex-col md:flex-row justify-between items-center gap-6">
+              <div className="flex items-center gap-4">
+                <p className="text-[11px] font-black text-slate-600 uppercase tracking-widest">
+                  © {new Date().getFullYear()} PROJECTPULSE
+                </p>
+                <div className="h-4 w-[1px] bg-slate-800 hidden md:block" />
+                <p className="text-[11px] font-black text-slate-700 uppercase tracking-tighter hidden md:block">
+                  Proprietary AI Framework for Enterprise Development
+                </p>
+              </div>
+
+              <div className="flex items-center gap-6">
+                {['Terms', 'Privacy', 'Security', 'SLA'].map(legal => (
+                  <a key={legal} href="#" className="text-[11px] font-black text-slate-600 hover:text-white transition-colors tracking-widest uppercase">
+                    {legal}
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   );

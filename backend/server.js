@@ -20,6 +20,8 @@ import errorHandler from './src/middleware/errorHandler.js';
 import authRoutes from './src/routes/authRoutes.js';
 import projectRoutes from './src/routes/projectRoutes.js';
 import analyticsRoutes from './src/routes/analyticsRoutes.js';
+import teamRoutes from './src/routes/teamRoutes.js';
+import webhookRoutes from './src/routes/webhookRoutes.js';
 
 // Services
 import { mlAnalytics } from './src/services/mlAnalytics.js';
@@ -91,9 +93,11 @@ app.get('/api/health', (req, res) => {
 });
 
 // API Routes
+app.use('/api/webhooks', webhookRoutes); // Public but token-verified
 app.use('/api/auth', authRoutes);
 app.use('/api', projectRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/team', teamRoutes);
 
 // 404 handler
 app.use((req, res) => {

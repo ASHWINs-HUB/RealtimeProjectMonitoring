@@ -47,7 +47,8 @@ const config = {
   jira: {
     baseUrl: (process.env.JIRA_BASE_URL || '').trim(),
     email: (process.env.JIRA_EMAIL || '').trim(),
-    apiToken: (process.env.JIRA_API_TOKEN || '').trim()
+    apiToken: (process.env.JIRA_API_TOKEN || '').trim(),
+    webhookToken: process.env.JIRA_WEBHOOK_TOKEN || 'secure_jira_pulse_token_2024'
   },
 
   webhook: {

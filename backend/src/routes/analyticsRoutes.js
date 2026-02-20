@@ -6,7 +6,8 @@ import {
     getJiraAnalytics, getGithubAnalytics, syncGithubCommits,
     triggerBatchCompute, getInsights, getManagerRecommendations,
     suggestTaskBreakdown, getRiskThresholds, getRoleRiskMetrics,
-    triggerEscalationCheck, getDeliveryVelocity, getSprintVelocity, getTeamPerformance
+    triggerEscalationCheck, getDeliveryVelocity, getSprintVelocity, getTeamPerformance,
+    getMetricsHistory
 } from '../controllers/analyticsController.js';
 
 const router = Router();
@@ -31,11 +32,12 @@ router.post('/project/:projectId/sync-commits', authorizeRoles('hr', 'manager', 
 router.get('/project/:projectId/delivery-velocity', authorizeRoles('hr', 'manager', 'team_leader', 'developer', 'admin', 'stakeholder'), getDeliveryVelocity);
 router.get('/project/:projectId/sprint-velocity', authorizeRoles('hr', 'manager', 'team_leader', 'developer', 'admin', 'stakeholder'), getSprintVelocity);
 router.get('/project/:projectId/team-performance', authorizeRoles('hr', 'manager', 'team_leader', 'developer', 'admin', 'stakeholder'), getTeamPerformance);
+router.get('/project/:projectId/metrics-history', authorizeRoles('hr', 'manager', 'team_leader', 'developer', 'admin', 'stakeholder'), getMetricsHistory);
 
 // Developer analytics
 router.get('/developer/:userId/performance', authorizeRoles('hr', 'manager', 'team_leader', 'developer', 'admin'), getDeveloperPerformance);
 router.get('/developer/:userId/burnout', authorizeRoles('hr', 'manager', 'team_leader', 'admin'), getBurnoutScore);
-router.get('/my-performance', authorizeRoles('developer', 'team_leader'), getDeveloperPerformance);
+router.get('/my-performance', getDeveloperPerformance);
 
 // Recommendations & Assistance
 router.get('/recommend-managers', authorizeRoles('hr', 'manager', 'admin'), getManagerRecommendations);

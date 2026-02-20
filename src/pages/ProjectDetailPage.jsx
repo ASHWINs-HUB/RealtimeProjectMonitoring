@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '@/services/api';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/components/ui/Toast';
@@ -8,20 +8,32 @@ import {
     BarChart3, Calendar, CheckCircle2, Clock, GitBranch,
     LayoutDashboard, ListChecks, Target, AlertTriangle,
     Github, Send, Zap, ChevronRight, Activity, TrendingUp,
-    FileText, Users, Plus, Loader2, ArrowLeft, X
+    FileText, Users, Plus, Loader2, ArrowLeft, X,
+    TrendingDown, Gauge, Rocket, Timer, ZapOff
 } from 'lucide-react';
+import {
+    AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+    RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+    XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart
+} from 'recharts';
 
 export const ProjectDetailPage = () => {
     const { id } = useParams();
     const { user } = useAuthStore();
+    const navigate = useNavigate();
     const toast = useToast();
     const [project, setProject] = useState(null);
     const [scopes, setScopes] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [risk, setRisk] = useState(null);
     const [forecast, setForecast] = useState(null);
+    const [sprintDelay, setSprintDelay] = useState(null);
+    const [deliveryVelocity, setDeliveryVelocity] = useState(null);
+    const [sprintVelocity, setSprintVelocity] = useState(null);
+    const [teamPerformance, setTeamPerformance] = useState(null);
     const [jiraAnalytics, setJiraAnalytics] = useState(null);
     const [githubAnalytics, setGithubAnalytics] = useState(null);
+    const [metricsHistory, setMetricsHistory] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('overview');
     const [showScopeModal, setShowScopeModal] = useState(false);
@@ -35,22 +47,32 @@ export const ProjectDetailPage = () => {
 
     const fetchData = useCallback(async () => {
         try {
-            const [projData, scopeData, taskData, riskData, forecastData, jiraData, githubData] = await Promise.all([
+            const [projData, scopeData, taskData, riskData, forecastData, sprintDelayData, velocityData, sprintData, teamData, jiraData, githubData, historyData] = await Promise.all([
                 api.getProject(id),
                 api.getScopes(id).catch(() => ({ scopes: [] })),
                 api.getProjectTasks(id).catch(() => ({ tasks: [] })),
                 api.getProjectRisk(id).catch(() => null),
                 api.getCompletionForecast(id).catch(() => null),
+                api.getSprintDelay(id).catch(() => null),
+                api.getDeliveryVelocity(id).catch(() => null),
+                api.getSprintVelocity(id).catch(() => null),
+                api.getTeamPerformance(id).catch(() => null),
                 api.getJiraAnalytics(id).catch(() => null),
-                api.getGithubAnalytics(id).catch(() => null)
+                api.getGithubAnalytics(id).catch(() => null),
+                api.getMetricsHistory(id).catch(() => null)
             ]);
             setProject(projData.project);
             setScopes(scopeData.scopes || []);
             setTasks(taskData.tasks || []);
             setRisk(riskData?.risk || null);
             setForecast(forecastData?.forecast || null);
+            setSprintDelay(sprintDelayData?.prediction || null);
+            setDeliveryVelocity(velocityData?.velocity || null);
+            setSprintVelocity(sprintData?.sprint || null);
+            setTeamPerformance(teamData?.performance || null);
             setJiraAnalytics(jiraData?.analytics || null);
             setGithubAnalytics(githubData?.analytics || null);
+            setMetricsHistory(historyData?.history || null);
 
             if (user?.role === 'manager' || user?.role === 'hr' || user?.role === 'admin') {
                 const tlData = await api.getUsers('team_leader').catch(() => ({ users: [] }));
@@ -141,7 +163,7 @@ export const ProjectDetailPage = () => {
         try {
             await api.declineProject(id);
             toast.success('Project assignment declined');
-            window.location.href = '/projects';
+            navigate('/projects');
         } catch (error) {
             toast.error(error.message || 'Failed to decline project');
             setSubmitting(false);
@@ -265,8 +287,8 @@ export const ProjectDetailPage = () => {
                                     </h3>
                                     <div className="flex items-center justify-center p-6 bg-emerald-50 rounded-2xl">
                                         <div className="text-center">
-                                            <p className="text-3xl font-black text-emerald-900">{forecast?.daily_velocity || '0.0'}</p>
-                                            <p className="text-xs font-bold text-emerald-700 uppercase mt-1">Daily Completion %</p>
+                                            <p className="text-3xl font-black text-emerald-900">{forecast?.completion_rate || '0'}%</p>
+                                            <p className="text-xs font-bold text-emerald-700 uppercase mt-1">Project Completion</p>
                                         </div>
                                     </div>
                                     <p className="text-xs text-gray-500 mt-4 italic text-center">Calculated based on cumulative task transitions in the last 30 days.</p>
@@ -279,8 +301,8 @@ export const ProjectDetailPage = () => {
                                     </h3>
                                     <div className="flex items-center justify-center p-6 bg-amber-50 rounded-2xl">
                                         <div className="text-center">
-                                            <p className="text-2xl font-black text-amber-900">{forecast?.estimated_completion_date || 'N/A'}</p>
-                                            <p className="text-xs font-bold text-amber-700 uppercase mt-1">Reliability: {forecast?.confidence || 0}%</p>
+                                            <p className="text-2xl font-black text-amber-900">{forecast?.estimated_days || 0} Days</p>
+                                            <p className="text-xs font-bold text-amber-700 uppercase mt-1">To Complete</p>
                                         </div>
                                     </div>
                                     <div className="mt-4 flex items-center gap-2">
@@ -479,254 +501,436 @@ export const ProjectDetailPage = () => {
 
                 {activeTab === 'analytics' && (
                     <div className="space-y-8">
-                        {/* Row 1: ML Risk + Sprint Forecast */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            <section className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-8 opacity-5"><Zap size={120} /></div>
-                                <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                                    <Activity size={24} className="text-indigo-600" /> ML Risk Analysis
-                                </h3>
-                                <div className="space-y-8">
-                                    {risk?.factors && Object.entries(risk.factors).map(([factor, impact]) => (
-                                        <div key={factor}>
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="text-sm font-bold text-gray-500 uppercase tracking-widest capitalize">{factor.replace('_', ' ')}</span>
-                                                <span className={`text-sm font-black ${impact > 0.5 ? 'text-red-500' : 'text-emerald-500'}`}>{Math.round(impact * 100)}% Impact</span>
-                                            </div>
-                                            <div className="w-full h-1.5 bg-gray-50 rounded-full overflow-hidden">
-                                                <div className={`h-full rounded-full transition-all duration-1000 ${impact > 0.5 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.min(100, impact * 100)}%` }} />
+                        {/* Color palette for charts */}
+                        {(() => {
+                            const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#f43f5e'];
+                            const STATUS_COLORS = { done: '#10b981', in_progress: '#6366f1', blocked: '#ef4444', todo: '#94a3b8', review: '#f59e0b' };
+                            const PRIORITY_COLORS = { critical: '#ef4444', high: '#f97316', medium: '#f59e0b', low: '#94a3b8' };
+
+                            const customTooltipStyle = { backgroundColor: 'rgba(15,23,42,0.95)', border: 'none', borderRadius: '12px', padding: '12px 16px', color: '#fff', fontSize: '12px', fontWeight: 600 };
+
+                            // Prepare chart data
+                            const statusData = (metricsHistory?.status_distribution || []).map(s => ({
+                                name: (s.status || '').replace('_', ' '),
+                                value: parseInt(s.count),
+                                fill: STATUS_COLORS[s.status] || '#94a3b8'
+                            }));
+                            const priorityData = (metricsHistory?.priority_distribution || []).map(p => ({
+                                name: p.priority,
+                                value: parseInt(p.count),
+                                fill: PRIORITY_COLORS[p.priority] || '#94a3b8'
+                            }));
+                            const scopeData = (metricsHistory?.scope_progress || []).map(s => ({
+                                name: s.scope_name?.length > 18 ? s.scope_name.slice(0, 18) + '…' : s.scope_name,
+                                progress: s.progress,
+                                total: s.total_tasks,
+                                done: s.done_tasks
+                            }));
+                            const velocityData = metricsHistory?.weekly_velocity || [];
+                            const timelineData = metricsHistory?.projected_timeline || [];
+                            const contributorData = (metricsHistory?.contributor_stats || []).map(c => ({
+                                name: c.name?.split(' ')[0],
+                                completed: c.completed,
+                                blocked: c.blocked,
+                                overdue: c.overdue,
+                                total: c.total
+                            }));
+
+                            // Risk factors for radar
+                            const riskFactors = risk?.factors ? [
+                                { factor: 'Blocked', value: Math.round((risk.factors.blocked_rate || 0) * 100) },
+                                { factor: 'Overdue', value: Math.round((risk.factors.overdue_rate || 0) * 100) },
+                                { factor: 'Schedule', value: Math.round(Math.abs(risk.factors.schedule_pressure || 0) * 100) },
+                                { factor: 'Effort', value: Math.round(Math.min((risk.factors.effort_ratio || 1), 3) * 33) },
+                                { factor: 'Velocity', value: Math.round(Math.min((risk.factors.commit_frequency || 0), 5) * 20) },
+                                { factor: 'Completion', value: Math.round((risk.factors.completion_rate || 0) * 100) }
+                            ] : [];
+
+                            return (<>
+                                {/* Row 1: Forecasted Completion Timeline + Risk Radar */}
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                                        className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><TrendingUp size={20} className="text-indigo-600" /></div>
+                                                Forecasted Completion
+                                            </h3>
+                                            <div className="flex items-center gap-4 text-xs font-bold">
+                                                <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-indigo-500" />Actual</span>
+                                                <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-violet-400 opacity-60" />ML Projected</span>
+                                                <span className="flex items-center gap-1.5"><span className="w-3 h-1.5 rounded-full bg-gray-300" />Ideal</span>
                                             </div>
                                         </div>
-                                    ))}
-                                    <div className="p-6 bg-indigo-50 rounded-3xl border border-indigo-100 mt-8">
-                                        <p className="text-sm font-bold text-indigo-900 mb-2">AI Recommendation</p>
-                                        <p className="text-sm text-indigo-700 leading-relaxed italic">
-                                            "Based on a {risk?.score}% risk score and current velocity patterns, we recommend
-                                            {risk?.score > 50 ? ' re-evaluating the critical path tasks and increasing dev capacity.' : ' continuing with the current sprint plan as factors are stable.'}"
-                                        </p>
-                                    </div>
-                                </div>
-                            </section>
+                                        {timelineData.length > 0 ? (
+                                            <ResponsiveContainer width="100%" height={280}>
+                                                <ComposedChart data={timelineData}>
+                                                    <defs>
+                                                        <linearGradient id="gradActual" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                                                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                                        </linearGradient>
+                                                        <linearGradient id="gradProjected" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2} />
+                                                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={v => v?.slice(5)} />
+                                                    <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} domain={[0, 100]} unit="%" />
+                                                    <Tooltip contentStyle={customTooltipStyle} formatter={(v, n) => [v != null ? `${v}%` : '—', n]} />
+                                                    <Area type="monotone" dataKey="actual" stroke="#6366f1" strokeWidth={3} fill="url(#gradActual)" dot={{ r: 4, fill: '#6366f1' }} connectNulls={false} />
+                                                    <Area type="monotone" dataKey="projected" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="8 4" fill="url(#gradProjected)" dot={{ r: 3, fill: '#8b5cf6' }} connectNulls={false} />
+                                                    <Line type="monotone" dataKey="ideal" stroke="#cbd5e1" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
+                                                </ComposedChart>
+                                            </ResponsiveContainer>
+                                        ) : (
+                                            <div className="h-[280px] flex items-center justify-center text-gray-400 text-sm">
+                                                <div className="text-center"><BarChart3 size={32} className="mx-auto mb-2 opacity-30" /><p>Insufficient data for forecast chart</p></div>
+                                            </div>
+                                        )}
+                                        <div className="mt-4 grid grid-cols-3 gap-4">
+                                            <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                                                <p className="text-2xl font-black text-indigo-900">{forecast?.estimated_days || 0}</p>
+                                                <p className="text-[10px] font-bold text-indigo-600 uppercase">Est. Days Left</p>
+                                            </div>
+                                            <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                                                <p className="text-2xl font-black text-emerald-900">{forecast?.completion_rate || 0}%</p>
+                                                <p className="text-[10px] font-bold text-emerald-600 uppercase">Completed</p>
+                                            </div>
+                                            <div className={`p-3 rounded-xl text-center ${forecast?.on_track ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                                                <p className={`text-2xl font-black ${forecast?.on_track ? 'text-emerald-900' : 'text-red-900'}`}>{forecast?.on_track ? '✓' : '✗'}</p>
+                                                <p className={`text-[10px] font-bold uppercase ${forecast?.on_track ? 'text-emerald-600' : 'text-red-600'}`}>{forecast?.on_track ? 'On Track' : 'At Risk'}</p>
+                                            </div>
+                                        </div>
+                                    </motion.section>
 
-                            <section className="bg-gradient-to-br from-slate-900 to-indigo-950 p-8 rounded-[40px] shadow-2xl relative overflow-hidden text-white">
-                                <div className="absolute inset-0 opacity-10">
-                                    <div className="absolute top-0 left-0 w-64 h-64 bg-indigo-600 rounded-full blur-[100px] -translate-x-1/2 -translate-y-1/2" />
-                                    <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-600 rounded-full blur-[120px] translate-x-1/3 translate-y-1/3" />
-                                </div>
-                                <div className="relative z-10">
-                                    <h3 className="text-xl font-bold mb-6 flex items-center gap-3">
-                                        <TrendingUp size={24} className="text-indigo-400" /> Sprint Forecast
-                                    </h3>
-                                    <div className="space-y-6">
-                                        <div className="p-6 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
-                                            <p className="text-xs font-bold text-indigo-300 uppercase mb-3 tracking-widest">Predicted Delay Probability</p>
-                                            <div className="flex items-end gap-4">
-                                                <span className="text-5xl font-black text-white">{forecast?.delay_probability || 12}%</span>
-                                                <span className={`text-sm font-bold mb-2 px-2 py-1 rounded-lg ${(forecast?.delay_probability || 12) > 50 ? 'text-red-400 bg-red-400/10' : 'text-emerald-400 bg-emerald-400/10'}`}>
-                                                    {(forecast?.delay_probability || 12) > 50 ? 'High Risk' : 'Low Probability'}
+                                    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+                                        className="bg-gradient-to-br from-slate-900 to-indigo-950 p-8 rounded-[2rem] shadow-2xl text-white relative overflow-hidden">
+                                        <div className="absolute inset-0 opacity-10">
+                                            <div className="absolute top-0 left-0 w-64 h-64 bg-indigo-600 rounded-full blur-[100px] -translate-x-1/2 -translate-y-1/2" />
+                                            <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-600 rounded-full blur-[120px] translate-x-1/3 translate-y-1/3" />
+                                        </div>
+                                        <div className="relative z-10">
+                                            <h3 className="text-lg font-bold mb-2 flex items-center gap-3">
+                                                <Activity size={20} className="text-indigo-400" /> ML Risk Analysis
+                                            </h3>
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <span className="text-4xl font-black">{risk?.score || 0}%</span>
+                                                <span className={`px-3 py-1 rounded-lg text-xs font-black uppercase ${risk?.level === 'critical' || risk?.level === 'high' ? 'bg-red-500/20 text-red-300' : risk?.level === 'medium' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                                                    {risk?.level || 'low'}
                                                 </span>
+                                                <span className="text-[10px] text-indigo-300 ml-auto uppercase font-bold">{risk?.source === 'xgboost' ? '🤖 XGBoost' : '📊 Heuristic'}</span>
                                             </div>
+                                            {riskFactors.length > 0 ? (
+                                                <ResponsiveContainer width="100%" height={200}>
+                                                    <RadarChart data={riskFactors}>
+                                                        <PolarGrid stroke="rgba(255,255,255,0.1)" />
+                                                        <PolarAngleAxis dataKey="factor" tick={{ fontSize: 10, fill: '#a5b4fc' }} />
+                                                        <PolarRadiusAxis tick={false} domain={[0, 100]} />
+                                                        <Radar dataKey="value" stroke="#818cf8" fill="#6366f1" fillOpacity={0.4} strokeWidth={2} />
+                                                    </RadarChart>
+                                                </ResponsiveContainer>
+                                            ) : (
+                                                <div className="h-[200px] flex items-center justify-center text-indigo-300 text-sm opacity-60">No risk factors</div>
+                                            )}
+                                            <p className="text-xs text-indigo-300 italic mt-2">Confidence: {risk?.confidence || 0}%</p>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="p-5 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
-                                                <p className="text-[10px] font-bold text-indigo-300 uppercase mb-1 tracking-widest">Est. Completion</p>
-                                                <p className="text-lg font-bold">{forecast?.estimated_completion_date || 'N/A'}</p>
-                                            </div>
-                                            <div className="p-5 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10">
-                                                <p className="text-[10px] font-bold text-indigo-300 uppercase mb-1 tracking-widest">Model Confidence</p>
-                                                <p className="text-lg font-bold">{risk?.confidence || forecast?.confidence || 0}%</p>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    </motion.section>
                                 </div>
-                            </section>
-                        </div>
 
-                        {/* Row 2: Jira Analytics */}
-                        {jiraAnalytics && (
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <section className="bg-white p-6 rounded-3xl border border-blue-100 shadow-sm">
-                                    <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                        <Target size={18} className="text-blue-600" /> Jira Issue Status
-                                    </h3>
-                                    <div className="space-y-3">
-                                        {jiraAnalytics.statusDistribution && Object.entries(jiraAnalytics.statusDistribution).map(([status, count]) => (
-                                            <div key={status} className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <div className={`w-2.5 h-2.5 rounded-full ${status === 'Done' ? 'bg-emerald-500' : status === 'In Progress' ? 'bg-blue-500' : status === 'To Do' ? 'bg-gray-400' : 'bg-amber-500'}`} />
-                                                    <span className="text-sm text-gray-700">{status}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                                        <div className={`h-full rounded-full ${status === 'Done' ? 'bg-emerald-500' : status === 'In Progress' ? 'bg-blue-500' : 'bg-gray-400'}`} style={{ width: `${jiraAnalytics.totalIssues > 0 ? (count / jiraAnalytics.totalIssues) * 100 : 0}%` }} />
-                                                    </div>
-                                                    <span className="text-xs font-bold text-gray-900 w-6 text-right">{count}</span>
-                                                </div>
+                                {/* Row 2: Velocity Chart + Sprint Delay + Status/Priority Pies */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+                                        className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center"><Rocket size={20} className="text-blue-600" /></div>
+                                                Delivery Velocity
+                                            </h3>
+                                            <div className="flex items-center gap-3 text-[10px] font-bold flex-wrap justify-end">
+                                                <span className="flex items-center gap-1"><span className="w-2.5 h-1.5 rounded-full bg-indigo-500" />Done</span>
+                                                {velocityData.some(v => v.active > 0) && <span className="flex items-center gap-1"><span className="w-2.5 h-1.5 rounded-full bg-orange-400" />Active</span>}
+                                                {velocityData.some(v => v.created > 0) && <span className="flex items-center gap-1"><span className="w-2.5 h-1.5 rounded-full bg-cyan-400" />Created</span>}
+                                                <span className="flex items-center gap-1"><span className="w-2.5 h-1.5 rounded-full bg-violet-300" />Points</span>
+                                                {velocityData.some(v => v.commits > 0) && <span className="flex items-center gap-1"><span className="w-2.5 h-1.5 rounded-full bg-emerald-500" />Commits</span>}
                                             </div>
-                                        ))}
-                                        {(!jiraAnalytics.statusDistribution || Object.keys(jiraAnalytics.statusDistribution).length === 0) && (
-                                            <p className="text-sm text-gray-400 italic text-center py-4">No issues tracked yet</p>
+                                        </div>
+                                        {velocityData.length > 0 ? (
+                                            <ResponsiveContainer width="100%" height={260}>
+                                                <BarChart data={velocityData} barGap={2} barCategoryGap="20%">
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                    <XAxis dataKey="week" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                                                    <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                                                    <Tooltip contentStyle={customTooltipStyle} />
+                                                    <Bar dataKey="tasks" name="Tasks Done" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                                                    {velocityData.some(v => v.active > 0) && <Bar dataKey="active" name="Active Work" fill="#fb923c" radius={[4, 4, 0, 0]} />}
+                                                    {velocityData.some(v => v.created > 0) && <Bar dataKey="created" name="Tasks Created" fill="#22d3ee" radius={[4, 4, 0, 0]} />}
+                                                    <Bar dataKey="points" name="Story Points" fill="#c4b5fd" radius={[4, 4, 0, 0]} />
+                                                    {velocityData.some(v => v.commits > 0) && <Bar dataKey="commits" name="Commits" fill="#10b981" radius={[4, 4, 0, 0]} />}
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        ) : (
+                                            <div className="h-[260px] flex items-center justify-center text-gray-400 text-sm">
+                                                <div className="text-center"><Rocket size={32} className="mx-auto mb-2 opacity-30" /><p>No weekly velocity data yet</p></div>
+                                            </div>
                                         )}
-                                    </div>
-                                    <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 gap-4">
-                                        <div className="text-center p-3 bg-blue-50 rounded-xl">
-                                            <p className="text-xl font-black text-blue-900">{jiraAnalytics.totalIssues || 0}</p>
-                                            <p className="text-[10px] font-bold text-blue-600 uppercase">Total Issues</p>
-                                        </div>
-                                        <div className="text-center p-3 bg-emerald-50 rounded-xl">
-                                            <p className="text-xl font-black text-emerald-900">{jiraAnalytics.issueCompletionRate || 0}%</p>
-                                            <p className="text-[10px] font-bold text-emerald-600 uppercase">Completion</p>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <section className="bg-white p-6 rounded-3xl border border-blue-100 shadow-sm">
-                                    <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                        <BarChart3 size={18} className="text-purple-600" /> Priority Breakdown
-                                    </h3>
-                                    <div className="space-y-3">
-                                        {jiraAnalytics.priorityDistribution && Object.entries(jiraAnalytics.priorityDistribution).map(([priority, count]) => (
-                                            <div key={priority} className="flex items-center justify-between p-2.5 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                                                <span className={`text-sm font-bold ${priority === 'Highest' || priority === 'High' ? 'text-red-600' : priority === 'Medium' ? 'text-amber-600' : 'text-gray-600'}`}>{priority}</span>
-                                                <span className="text-sm font-black text-gray-900">{count}</span>
+                                        <div className="mt-4 grid grid-cols-4 gap-3">
+                                            <div className="p-3 bg-blue-50 rounded-xl text-center">
+                                                <p className="text-xl font-black text-blue-900">
+                                                    {velocityData.length > 0 ? velocityData.reduce((s, v) => s + (v.tasks || 0) + (v.active || 0) + (v.created || 0), 0) : 0}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-blue-600 uppercase">Total Activity</p>
                                             </div>
-                                        ))}
-                                    </div>
-                                    <div className="mt-4 pt-4 border-t border-gray-100 text-center p-3 bg-amber-50 rounded-xl">
-                                        <p className="text-xl font-black text-amber-900">{jiraAnalytics.avgResolutionDays || 0}</p>
-                                        <p className="text-[10px] font-bold text-amber-600 uppercase">Avg Days to Resolve</p>
-                                    </div>
-                                </section>
+                                            <div className="p-3 bg-purple-50 rounded-xl text-center">
+                                                <p className="text-xl font-black text-purple-900">
+                                                    {velocityData.length > 0 ? Math.round(velocityData.reduce((s, v) => s + (v.tasks || 0), 0) / Math.max(velocityData.length, 1)) : 0}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-purple-600 uppercase">Avg Tasks/Wk</p>
+                                            </div>
+                                            <div className="p-3 bg-orange-50 rounded-xl text-center">
+                                                <p className="text-xl font-black text-orange-900">
+                                                    {velocityData.reduce((s, v) => s + (v.active || 0), 0)}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-orange-600 uppercase">Active Work</p>
+                                            </div>
+                                            <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                                                <p className={`text-xl font-black ${deliveryVelocity?.velocity_trend === 'high' ? 'text-emerald-700' : 'text-indigo-900'}`}>
+                                                    {(deliveryVelocity?.velocity_trend || velocityData.length > 0 ? 'active' : 'N/A').replace('_', ' ')}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-indigo-600 uppercase">Trend</p>
+                                            </div>
+                                        </div>
+                                    </motion.section>
 
-                                <section className="bg-white p-6 rounded-3xl border border-blue-100 shadow-sm">
-                                    <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                        <Clock size={18} className="text-indigo-600" /> Recent Jira Issues
-                                    </h3>
-                                    <div className="space-y-2 max-h-80 overflow-y-auto">
-                                        {jiraAnalytics.recentIssues && jiraAnalytics.recentIssues.map((issue, idx) => (
-                                            <div key={idx} className="p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                                                <div className="flex items-center justify-between mb-1">
-                                                    <span className="text-xs font-bold text-blue-600">{issue.key}</span>
-                                                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${issue.status === 'Done' ? 'bg-emerald-100 text-emerald-700' : issue.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>{issue.status}</span>
+                                    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                                        className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                                        <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><AlertTriangle size={20} className="text-amber-600" /></div>
+                                            Sprint Delay Prediction
+                                        </h3>
+                                        <div className="flex items-center justify-center gap-8 mb-6">
+                                            {/* Gauge-style display */}
+                                            <div className="relative w-40 h-40">
+                                                <svg className="w-full h-full transform -rotate-90">
+                                                    <circle cx="80" cy="80" r="65" stroke="#f1f5f9" strokeWidth="14" fill="transparent" />
+                                                    <circle cx="80" cy="80" r="65" stroke={`${(sprintDelay?.delay_probability || 0) > 50 ? '#ef4444' : (sprintDelay?.delay_probability || 0) > 25 ? '#f59e0b' : '#10b981'}`}
+                                                        strokeWidth="14" fill="transparent" strokeLinecap="round"
+                                                        strokeDasharray={408} strokeDashoffset={408 - (408 * (sprintDelay?.delay_probability || 0)) / 100}
+                                                        className="transition-all duration-1000" />
+                                                </svg>
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                    <span className="text-3xl font-black text-gray-900">{sprintDelay?.delay_probability || 0}%</span>
+                                                    <span className="text-[10px] font-bold text-gray-400 uppercase">Delay Risk</span>
                                                 </div>
-                                                <p className="text-xs text-gray-700 line-clamp-1">{issue.summary}</p>
                                             </div>
-                                        ))}
-                                        {(!jiraAnalytics.recentIssues || jiraAnalytics.recentIssues.length === 0) && (
-                                            <p className="text-sm text-gray-400 italic text-center py-4">No recent issues</p>
-                                        )}
-                                    </div>
-                                </section>
-                            </div>
-                        )}
-
-                        {/* Row 3: GitHub Analytics */}
-                        {githubAnalytics && (
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <section className="bg-white p-6 rounded-3xl border border-indigo-100 shadow-sm">
-                                    <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                        <GitBranch size={18} className="text-indigo-600" /> Commit Activity
-                                    </h3>
-                                    <div className="grid grid-cols-2 gap-3 mb-4">
-                                        <div className="text-center p-3 bg-indigo-50 rounded-xl">
-                                            <p className="text-xl font-black text-indigo-900">{githubAnalytics.totalCommits || 0}</p>
-                                            <p className="text-[10px] font-bold text-indigo-600 uppercase">Total</p>
-                                        </div>
-                                        <div className="text-center p-3 bg-emerald-50 rounded-xl">
-                                            <p className="text-xl font-black text-emerald-900">{githubAnalytics.recentCommits || 0}</p>
-                                            <p className="text-[10px] font-bold text-emerald-600 uppercase">Last 30 Days</p>
-                                        </div>
-                                    </div>
-                                    {githubAnalytics.commitsByDay && Object.keys(githubAnalytics.commitsByDay).length > 0 && (
-                                        <div>
-                                            <p className="text-xs font-bold text-gray-400 mb-2 uppercase">Daily Commits</p>
-                                            <div className="flex items-end gap-0.5 h-20">
-                                                {Object.entries(githubAnalytics.commitsByDay).slice(-14).map(([day, count], i) => {
-                                                    const max = Math.max(...Object.values(githubAnalytics.commitsByDay));
-                                                    return (
-                                                        <motion.div key={i} initial={{ height: 0 }} animate={{ height: `${max > 0 ? (count / max) * 100 : 0}%` }}
-                                                            className="flex-1 bg-indigo-400 hover:bg-indigo-600 rounded-t-sm transition-colors cursor-pointer relative group" title={`${day}: ${count} commits`}>
-                                                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[7px] font-bold text-indigo-600 opacity-0 group-hover:opacity-100">{count}</div>
-                                                        </motion.div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {githubAnalytics.lastCommit && (
-                                        <div className="mt-3 p-2.5 bg-gray-50 rounded-xl">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase">Latest Commit</p>
-                                            <p className="text-xs text-gray-700 line-clamp-1 mt-0.5">{githubAnalytics.lastCommit.message}</p>
-                                            <p className="text-[10px] text-gray-400 mt-0.5">by {githubAnalytics.lastCommit.author}</p>
-                                        </div>
-                                    )}
-                                </section>
-
-                                <section className="bg-white p-6 rounded-3xl border border-indigo-100 shadow-sm">
-                                    <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                        <Users size={18} className="text-purple-600" /> Contributors & PRs
-                                    </h3>
-                                    <div className="space-y-2 mb-4">
-                                        {githubAnalytics.contributors?.slice(0, 5).map((c, i) => (
-                                            <div key={i} className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-50 transition-colors">
-                                                <div className="flex items-center gap-2">
-                                                    <img src={c.avatar_url} alt={c.login} className="w-6 h-6 rounded-full" />
-                                                    <span className="text-sm font-medium text-gray-700">{c.login}</span>
+                                            <div className="space-y-4">
+                                                <div className="p-4 bg-gray-50 rounded-xl">
+                                                    <p className="text-[10px] font-bold text-gray-400 uppercase">Est. Delay</p>
+                                                    <p className="text-xl font-black text-gray-900">{sprintDelay?.estimated_delay_days || 0} days</p>
                                                 </div>
-                                                <span className="text-xs font-bold text-indigo-600">{c.contributions} commits</span>
+                                                <div className="p-4 bg-gray-50 rounded-xl">
+                                                    <p className="text-[10px] font-bold text-gray-400 uppercase">Confidence</p>
+                                                    <p className="text-xl font-black text-gray-900">{sprintDelay?.confidence || risk?.confidence || 0}%</p>
+                                                </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-2 pt-4 border-t border-gray-100">
-                                        <div className="text-center p-2 bg-emerald-50 rounded-xl">
-                                            <p className="text-lg font-black text-emerald-700">{githubAnalytics.pullRequests?.merged || 0}</p>
-                                            <p className="text-[9px] font-bold text-emerald-600 uppercase">Merged</p>
                                         </div>
-                                        <div className="text-center p-2 bg-amber-50 rounded-xl">
-                                            <p className="text-lg font-black text-amber-700">{githubAnalytics.pullRequests?.open || 0}</p>
-                                            <p className="text-[9px] font-bold text-amber-600 uppercase">Open</p>
-                                        </div>
-                                        <div className="text-center p-2 bg-gray-50 rounded-xl">
-                                            <p className="text-lg font-black text-gray-700">{githubAnalytics.pullRequests?.closed || 0}</p>
-                                            <p className="text-[9px] font-bold text-gray-500 uppercase">Closed</p>
-                                        </div>
-                                    </div>
-                                </section>
+                                    </motion.section>
+                                </div>
 
-                                <section className="bg-white p-6 rounded-3xl border border-indigo-100 shadow-sm">
-                                    <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                        <FileText size={18} className="text-teal-600" /> Languages
-                                    </h3>
-                                    <div className="space-y-3">
-                                        {githubAnalytics.languages && Object.entries(githubAnalytics.languages).sort(([, a], [, b]) => b - a).map(([lang, bytes]) => {
-                                            const pct = githubAnalytics.totalLanguageBytes > 0 ? ((bytes / githubAnalytics.totalLanguageBytes) * 100).toFixed(1) : 0;
-                                            return (
-                                                <div key={lang}>
-                                                    <div className="flex justify-between items-center mb-1">
-                                                        <span className="text-sm font-medium text-gray-700">{lang}</span>
-                                                        <span className="text-xs font-bold text-gray-500">{pct}%</span>
+                                {/* Row 3: Status Pie + Priority Pie + Scope Progress */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+                                        className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+                                        <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                            <CheckCircle2 size={16} className="text-emerald-500" /> Task Status
+                                        </h3>
+                                        {statusData.length > 0 ? (
+                                            <ResponsiveContainer width="100%" height={200}>
+                                                <PieChart>
+                                                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3} strokeWidth={0}>
+                                                        {statusData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                                                    </Pie>
+                                                    <Tooltip contentStyle={customTooltipStyle} />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        ) : <div className="h-[200px] flex items-center justify-center text-gray-300 text-sm">No tasks</div>}
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            {statusData.map((s, i) => (
+                                                <span key={i} className="flex items-center gap-1 text-[10px] font-bold text-gray-600">
+                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.fill }} />{s.name} ({s.value})
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </motion.section>
+
+                                    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+                                        className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+                                        <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                            <AlertTriangle size={16} className="text-amber-500" /> Priority Mix
+                                        </h3>
+                                        {priorityData.length > 0 ? (
+                                            <ResponsiveContainer width="100%" height={200}>
+                                                <PieChart>
+                                                    <Pie data={priorityData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" paddingAngle={3} strokeWidth={0}>
+                                                        {priorityData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                                                    </Pie>
+                                                    <Tooltip contentStyle={customTooltipStyle} />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        ) : <div className="h-[200px] flex items-center justify-center text-gray-300 text-sm">No tasks</div>}
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            {priorityData.map((p, i) => (
+                                                <span key={i} className="flex items-center gap-1 text-[10px] font-bold text-gray-600 capitalize">
+                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.fill }} />{p.name} ({p.value})
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </motion.section>
+
+                                    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
+                                        className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+                                        <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                            <Target size={16} className="text-indigo-500" /> Scope Progress
+                                        </h3>
+                                        {scopeData.length > 0 ? (
+                                            <div className="space-y-4">
+                                                {scopeData.map((scope, i) => (
+                                                    <div key={i}>
+                                                        <div className="flex justify-between text-xs mb-1">
+                                                            <span className="font-bold text-gray-700 truncate">{scope.name}</span>
+                                                            <span className="font-black text-indigo-600">{scope.progress}%</span>
+                                                        </div>
+                                                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                                            <motion.div initial={{ width: 0 }} animate={{ width: `${scope.progress}%` }} transition={{ duration: 1, delay: i * 0.1 }}
+                                                                className="h-full rounded-full" style={{ background: `linear-gradient(90deg, ${COLORS[i % COLORS.length]}, ${COLORS[(i + 1) % COLORS.length]})` }} />
+                                                        </div>
+                                                        <p className="text-[10px] text-gray-400 mt-0.5">{scope.done}/{scope.total} tasks</p>
                                                     </div>
-                                                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-gradient-to-r from-teal-400 to-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </section>
-                            </div>
-                        )}
+                                                ))}
+                                            </div>
+                                        ) : <div className="h-[200px] flex items-center justify-center text-gray-300 text-sm">No scopes</div>}
+                                    </motion.section>
+                                </div>
 
-                        {/* No integrations message */}
-                        {!jiraAnalytics && !githubAnalytics && (
-                            <div className="bg-white rounded-3xl border border-dashed border-gray-300 p-12 text-center">
-                                <BarChart3 size={48} className="mx-auto text-gray-300 mb-4" />
-                                <p className="text-gray-500 font-bold">No Integration Analytics Available</p>
-                                <p className="text-sm text-gray-400 mt-1">GitHub and Jira integrations provide rich analytics when connected during project creation.</p>
-                            </div>
-                        )}
+                                {/* Row 4: Team Performance Chart */}
+                                {contributorData.length > 0 && (
+                                    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
+                                        className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                                        <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center"><Users size={20} className="text-purple-600" /></div>
+                                            Contributor Performance
+                                        </h3>
+                                        <ResponsiveContainer width="100%" height={280}>
+                                            <BarChart data={contributorData} layout="vertical" barGap={2}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                                                <XAxis type="number" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                                                <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} />
+                                                <Tooltip contentStyle={customTooltipStyle} />
+                                                <Legend wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
+                                                <Bar dataKey="completed" name="Completed" stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
+                                                <Bar dataKey="blocked" name="Blocked" stackId="a" fill="#ef4444" />
+                                                <Bar dataKey="overdue" name="Overdue" stackId="a" fill="#f59e0b" radius={[0, 6, 6, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </motion.section>
+                                )}
+
+                                {/* Row 5: GitHub Analytics (if connected) */}
+                                {githubAnalytics && (
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                        <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
+                                            className="lg:col-span-2 bg-white p-6 rounded-[2rem] border border-indigo-100 shadow-sm">
+                                            <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                                <GitBranch size={18} className="text-indigo-600" /> Commit Activity
+                                            </h3>
+                                            {githubAnalytics.commitsByDay && Object.keys(githubAnalytics.commitsByDay).length > 0 ? (
+                                                <ResponsiveContainer width="100%" height={200}>
+                                                    <AreaChart data={Object.entries(githubAnalytics.commitsByDay).slice(-21).map(([day, count]) => ({ day: day.slice(5), commits: count }))}>
+                                                        <defs>
+                                                            <linearGradient id="gradCommits" x1="0" y1="0" x2="0" y2="1">
+                                                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                                                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                                            </linearGradient>
+                                                        </defs>
+                                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                                        <XAxis dataKey="day" tick={{ fontSize: 9, fill: '#94a3b8' }} />
+                                                        <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                                                        <Tooltip contentStyle={customTooltipStyle} />
+                                                        <Area type="monotone" dataKey="commits" stroke="#6366f1" strokeWidth={2} fill="url(#gradCommits)" dot={{ r: 3, fill: '#6366f1' }} />
+                                                    </AreaChart>
+                                                </ResponsiveContainer>
+                                            ) : <div className="h-[200px] flex items-center justify-center text-gray-300 text-sm">No commit data</div>}
+                                            <div className="grid grid-cols-3 gap-3 mt-4">
+                                                <div className="p-3 bg-indigo-50 rounded-xl text-center">
+                                                    <p className="text-xl font-black text-indigo-900">{githubAnalytics.totalCommits || 0}</p>
+                                                    <p className="text-[10px] font-bold text-indigo-600 uppercase">Total</p>
+                                                </div>
+                                                <div className="p-3 bg-emerald-50 rounded-xl text-center">
+                                                    <p className="text-xl font-black text-emerald-900">{githubAnalytics.recentCommits || 0}</p>
+                                                    <p className="text-[10px] font-bold text-emerald-600 uppercase">30-Day</p>
+                                                </div>
+                                                <div className="p-3 bg-purple-50 rounded-xl text-center">
+                                                    <p className="text-xl font-black text-purple-900">{githubAnalytics.recentContributors || 0}</p>
+                                                    <p className="text-[10px] font-bold text-purple-600 uppercase">Contributors</p>
+                                                </div>
+                                            </div>
+                                        </motion.section>
+                                        <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
+                                            className="bg-white p-6 rounded-[2rem] border border-indigo-100 shadow-sm">
+                                            <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
+                                                <Users size={18} className="text-purple-600" /> PRs & Contributors
+                                            </h3>
+                                            <div className="space-y-2 mb-4">
+                                                {githubAnalytics.contributors?.slice(0, 5).map((c, i) => (
+                                                    <div key={i} className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-50 transition-colors">
+                                                        <div className="flex items-center gap-2">
+                                                            <img src={c.avatar_url} alt={c.login} className="w-6 h-6 rounded-full" />
+                                                            <span className="text-sm font-medium text-gray-700">{c.login}</span>
+                                                        </div>
+                                                        <span className="text-xs font-bold text-indigo-600">{c.contributions}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-2 pt-4 border-t border-gray-100">
+                                                <div className="text-center p-2 bg-emerald-50 rounded-xl">
+                                                    <p className="text-lg font-black text-emerald-700">{githubAnalytics.pullRequests?.merged || 0}</p>
+                                                    <p className="text-[9px] font-bold text-emerald-600 uppercase">Merged</p>
+                                                </div>
+                                                <div className="text-center p-2 bg-amber-50 rounded-xl">
+                                                    <p className="text-lg font-black text-amber-700">{githubAnalytics.pullRequests?.open || 0}</p>
+                                                    <p className="text-[9px] font-bold text-amber-600 uppercase">Open</p>
+                                                </div>
+                                                <div className="text-center p-2 bg-gray-50 rounded-xl">
+                                                    <p className="text-lg font-black text-gray-700">{githubAnalytics.pullRequests?.closed || 0}</p>
+                                                    <p className="text-[9px] font-bold text-gray-500 uppercase">Closed</p>
+                                                </div>
+                                            </div>
+                                        </motion.section>
+                                    </div>
+                                )}
+
+                                {/* AI Recommendation */}
+                                <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}
+                                    className="bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 p-8 rounded-[2rem] border border-indigo-100">
+                                    <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-3">
+                                        <Zap size={20} className="text-indigo-600" /> AI Recommendation
+                                    </h3>
+                                    <p className="text-sm text-gray-700 leading-relaxed italic">
+                                        "Based on a {risk?.score || 0}% risk score{risk?.source === 'xgboost' ? ' (XGBoost ML model)' : ''} and current velocity of {deliveryVelocity?.velocity || 0} tasks/week,{' '}
+                                        {(risk?.score || 0) > 50
+                                            ? 'we recommend re-evaluating critical path tasks, increasing dev capacity, and addressing blocked items immediately.'
+                                            : (risk?.score || 0) > 25
+                                                ? 'the project is progressing well but monitor overdue tasks and schedule pressure closely.'
+                                                : 'the project is in excellent health. Continue with the current sprint plan as all factors are stable.'}
+                                        {forecast?.on_track ? '' : ` The ML model predicts the project may need an additional ${forecast?.estimated_days || 0} days beyond the target deadline.`}"
+                                    </p>
+                                </motion.section>
+                            </>);
+                        })()}
                     </div>
                 )}
+
 
                 {activeTab === 'team' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -776,11 +980,12 @@ export const ProjectDetailPage = () => {
                             </div>
                         )}
                     </div>
-                )}
-            </div>
+                )
+                }
+            </div >
 
             {/* Modals */}
-            <AnimatePresence>
+            < AnimatePresence >
                 {showScopeModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
                         <motion.div
@@ -850,83 +1055,85 @@ export const ProjectDetailPage = () => {
                     </div>
                 )}
 
-                {showTaskModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
-                        >
-                            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                                <div>
-                                    <h2 className="text-xl font-bold text-gray-900">Create New Task</h2>
-                                    <p className="text-xs text-gray-500">Under: {activeScope?.title}</p>
-                                </div>
-                                <button onClick={() => setShowTaskModal(false)} className="p-2 rounded-xl hover:bg-gray-100"><X size={18} /></button>
-                            </div>
-                            <form onSubmit={handleCreateTask} className="p-6 space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Task Title</label>
-                                    <input
-                                        type="text" required
-                                        value={newTask.title}
-                                        onChange={e => setNewTask({ ...newTask, title: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                                        placeholder="Implement Auth Middleware"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                                        {user?.role === 'manager' ? 'Assign To (Team Leader)' : 'Assignee'}
-                                    </label>
-                                    <select
-                                        required
-                                        value={newTask.assigned_to}
-                                        onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                                    >
-                                        <option value="">Select {user?.role === 'manager' ? 'Leader' : 'Developer'}</option>
-                                        {developers.map(dev => (
-                                            <option key={dev.id} value={dev.id}>{dev.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
+                {
+                    showTaskModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
+                            >
+                                <div className="p-6 border-b border-gray-100 flex items-center justify-between">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority</label>
-                                        <select
-                                            value={newTask.priority}
-                                            onChange={e => setNewTask({ ...newTask, priority: e.target.value })}
-                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                                        >
-                                            <option value="low">Low</option>
-                                            <option value="medium">Medium</option>
-                                            <option value="high">High</option>
-                                            <option value="critical">Critical</option>
-                                        </select>
+                                        <h2 className="text-xl font-bold text-gray-900">Create New Task</h2>
+                                        <p className="text-xs text-gray-500">Under: {activeScope?.title}</p>
                                     </div>
+                                    <button onClick={() => setShowTaskModal(false)} className="p-2 rounded-xl hover:bg-gray-100"><X size={18} /></button>
+                                </div>
+                                <form onSubmit={handleCreateTask} className="p-6 space-y-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Due Date</label>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Task Title</label>
                                         <input
-                                            type="date"
-                                            value={newTask.deadline}
-                                            onChange={e => setNewTask({ ...newTask, deadline: e.target.value })}
+                                            type="text" required
+                                            value={newTask.title}
+                                            onChange={e => setNewTask({ ...newTask, title: e.target.value })}
                                             className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            placeholder="Implement Auth Middleware"
                                         />
                                     </div>
-                                </div>
-                                <button
-                                    type="submit" disabled={submitting}
-                                    className="w-full py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                                >
-                                    {submitting ? <Loader2 size={16} className="animate-spin" /> : 'Create Task'}
-                                </button>
-                            </form>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-        </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                            {user?.role === 'manager' ? 'Assign To (Team Leader)' : 'Assignee'}
+                                        </label>
+                                        <select
+                                            required
+                                            value={newTask.assigned_to}
+                                            onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                        >
+                                            <option value="">Select {user?.role === 'manager' ? 'Leader' : 'Developer'}</option>
+                                            {developers.map(dev => (
+                                                <option key={dev.id} value={dev.id}>{dev.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Priority</label>
+                                            <select
+                                                value={newTask.priority}
+                                                onChange={e => setNewTask({ ...newTask, priority: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            >
+                                                <option value="low">Low</option>
+                                                <option value="medium">Medium</option>
+                                                <option value="high">High</option>
+                                                <option value="critical">Critical</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Due Date</label>
+                                            <input
+                                                type="date"
+                                                value={newTask.deadline}
+                                                onChange={e => setNewTask({ ...newTask, deadline: e.target.value })}
+                                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit" disabled={submitting}
+                                        className="w-full py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {submitting ? <Loader2 size={16} className="animate-spin" /> : 'Create Task'}
+                                    </button>
+                                </form>
+                            </motion.div>
+                        </div>
+                    )
+                }
+            </AnimatePresence >
+        </div >
     );
 };

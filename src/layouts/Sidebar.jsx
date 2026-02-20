@@ -1,13 +1,13 @@
 import React, { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { 
-  LayoutDashboard, 
-  FolderKanban, 
-  BarChart3, 
-  Code2, 
-  Settings, 
-  Menu, 
+import {
+  LayoutDashboard,
+  FolderKanban,
+  BarChart3,
+  Code2,
+  Settings,
+  Menu,
   X,
   Users,
   GitBranch,
@@ -18,13 +18,15 @@ import { useAuthStore } from '@/store/authStore'
 import { cn } from '@/utils/cn'
 
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['hr', 'manager', 'team_leader', 'developer'], path: '/' },
-  { id: 'projects', label: 'Projects', icon: FolderKanban, roles: ['hr', 'manager', 'team_leader'], path: '/projects' },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['hr', 'manager', 'team_leader', 'developer', 'stakeholder'], path: '/dashboard' },
+  { id: 'projects', label: 'Projects', icon: FolderKanban, roles: ['hr', 'manager', 'team_leader', 'stakeholder'], path: '/projects' },
   { id: 'analytics', label: 'Analytics', icon: BarChart3, roles: ['hr', 'manager'], path: '/analytics' },
   { id: 'repository', label: 'Repository', icon: Code2, roles: ['manager', 'team_leader', 'developer'], path: '/repository' },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare, roles: ['team_leader', 'developer'], path: '/tasks' },
   { id: 'team', label: 'Team', icon: Users, roles: ['hr', 'manager'], path: '/team' },
-  { id: 'settings', label: 'Settings', icon: Settings, roles: ['hr', 'manager', 'team_leader', 'developer'], path: '/settings' },
+  { id: 'managers', label: 'Managers', icon: Users, roles: ['hr'], path: '/managers' },
+  { id: 'team-members', label: 'Team Members', icon: Users, roles: ['team_leader'], path: '/team-members' },
+  { id: 'settings', label: 'Settings', icon: Settings, roles: ['hr', 'manager', 'team_leader', 'developer', 'stakeholder'], path: '/settings' },
 ]
 
 export const Sidebar = () => {
@@ -33,7 +35,7 @@ export const Sidebar = () => {
   const location = useLocation()
   const { user } = useAuthStore()
 
-  const filteredMenuItems = menuItems.filter(item => 
+  const filteredMenuItems = menuItems.filter(item =>
     item.roles.includes(user?.role)
   )
 
@@ -48,7 +50,12 @@ export const Sidebar = () => {
   // Get current active item based on pathname
   const getActiveItem = () => {
     const currentPath = location.pathname
-    return menuItems.find(item => item.path === currentPath)?.id || 'dashboard'
+    // Exact match first, then prefix match for sub-routes
+    const exact = menuItems.find(item => item.path === currentPath)
+    if (exact) return exact.id
+    const prefix = menuItems.find(item => item.path !== '/dashboard' && currentPath.startsWith(item.path))
+    if (prefix) return prefix.id
+    return 'dashboard'
   }
 
   const activeItem = getActiveItem()

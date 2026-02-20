@@ -171,48 +171,48 @@ export const StakeholderDashboard = () => {
                             initial={{ scale: 0.9, opacity: 0, y: 20 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                            className="bg-white rounded-[2rem] w-full max-w-xl shadow-2xl overflow-hidden border border-indigo-50"
+                            className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-y-auto scrollbar-hide max-h-[90vh] border border-indigo-50"
                         >
-                            <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-2xl font-black text-gray-900 tracking-tight">Propose New Project</h2>
-                                    <p className="text-sm text-gray-500 font-bold uppercase tracking-widest mt-1">Submission Form</p>
+                                    <h2 className="text-xl font-black text-gray-900 tracking-tight">Propose Project</h2>
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Submission Portal</p>
                                 </div>
-                                <button onClick={() => setShowForm(false)} className="p-2 hover:bg-gray-200 rounded-2xl transition-colors">
-                                    <Plus className="rotate-45 text-gray-400" size={24} />
+                                <button onClick={() => setShowForm(false)} className="p-2 hover:bg-gray-100 rounded-2xl transition-colors">
+                                    <Plus className="rotate-45 text-gray-400" size={20} />
                                 </button>
                             </div>
 
-                            <form onSubmit={handleSubmitProposal} className="p-8 space-y-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Project Name</label>
+                            <form onSubmit={handleSubmitProposal} className="p-6 space-y-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Project Name</label>
                                     <input
                                         required
                                         type="text"
-                                        placeholder="Enter a bold project title..."
-                                        className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-gray-900"
+                                        placeholder="Project title..."
+                                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl focus:border-indigo-500 outline-none transition-all font-bold text-gray-900 text-sm"
                                         value={formData.name}
                                         onChange={e => setFormData({ ...formData, name: e.target.value })}
                                     />
                                 </div>
 
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Project Objective</label>
+                                <div className="space-y-1.5">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Objective</label>
                                     <textarea
                                         required
-                                        rows={3}
-                                        placeholder="Describe the mission of this project..."
-                                        className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-gray-900 resize-none"
+                                        rows={2}
+                                        placeholder="Describe the mission..."
+                                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl focus:border-indigo-500 outline-none transition-all font-bold text-gray-900 text-sm resize-none"
                                         value={formData.description}
                                         onChange={e => setFormData({ ...formData, description: e.target.value })}
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Priority</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Priority</label>
                                         <select
-                                            className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-gray-900"
+                                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl focus:border-indigo-500 outline-none transition-all font-bold text-gray-900 text-sm"
                                             value={formData.priority}
                                             onChange={e => setFormData({ ...formData, priority: e.target.value })}
                                         >
@@ -222,23 +222,23 @@ export const StakeholderDashboard = () => {
                                             <option value="critical">Critical</option>
                                         </select>
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Budget ($)</label>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Budget ($)</label>
                                         <input
                                             type="number"
-                                            placeholder="Estimated budget..."
-                                            className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-gray-900"
+                                            placeholder="Budget..."
+                                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl focus:border-indigo-500 outline-none transition-all font-bold text-gray-900 text-sm"
                                             value={formData.budget}
                                             onChange={e => setFormData({ ...formData, budget: e.target.value })}
                                         />
                                     </div>
                                 </div>
 
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Target Deadline</label>
+                                <div className="space-y-1.5">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Target Deadline</label>
                                     <input
                                         type="date"
-                                        className="w-full px-5 py-4 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-gray-900"
+                                        className="w-full px-4 py-3 bg-white border border-gray-200 rounded-2xl focus:border-indigo-500 outline-none transition-all font-bold text-gray-900 text-sm"
                                         value={formData.deadline}
                                         onChange={e => setFormData({ ...formData, deadline: e.target.value })}
                                     />
@@ -246,10 +246,10 @@ export const StakeholderDashboard = () => {
 
                                 <button
                                     type="submit"
-                                    className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-[0.98]"
+                                    className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-[0.98] text-xs uppercase tracking-widest"
                                 >
-                                    <Send size={18} />
-                                    SUBMIT MISSION PROPOSAL
+                                    <Send size={16} />
+                                    Submit Proposal
                                 </button>
                             </form>
                         </motion.div>

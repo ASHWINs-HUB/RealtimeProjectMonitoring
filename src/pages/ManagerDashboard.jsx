@@ -95,58 +95,64 @@ export const ManagerDashboard = () => {
       <RiskAlertBanner alerts={alerts} onDismiss={(i) => setDismissedAlerts(p => [...p, i])} />
 
       {/* Top Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <motion.div {...fadeIn} className="bg-gradient-to-br from-gray-900 to-indigo-950 p-6 rounded-[2rem] text-white shadow-2xl flex flex-col items-center justify-center">
-          <RiskScoreGauge score={managerRisk} label="Portfolio Risk" size="lg" thresholds={thresholds} />
-          <span className={`mt-3 text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${metrics?.risk_level === 'danger' ? 'bg-red-500/20 text-red-300' :
-              metrics?.risk_level === 'warning' ? 'bg-amber-500/20 text-amber-300' :
-                'bg-emerald-500/20 text-emerald-300'
-            }`}>
-            {metrics?.risk_level === 'danger' ? 'Critical' : metrics?.risk_level === 'warning' ? 'Elevated' : 'Healthy'}
-          </span>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <motion.div {...fadeIn} transition={{ delay: 0.1 }} className="bg-gradient-to-br from-slate-900 to-indigo-950 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-bl-[100px] -mr-4 -mt-4 transition-all group-hover:scale-110" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 bg-emerald-500/20 rounded-2xl border border-emerald-500/20">
+                <Target size={24} className="text-emerald-400" />
+              </div>
+              <p className="text-[11px] font-black text-emerald-400 uppercase tracking-[0.2em]">Delivery Predictability</p>
+            </div>
+            <div className="flex items-end gap-3 mb-6">
+              <p className="text-5xl font-black text-white">{deliveryPredictability}%</p>
+              <TrendingUp size={24} className="text-emerald-400 mb-2" />
+            </div>
+            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${deliveryPredictability}%` }}
+                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full"
+              />
+            </div>
+          </div>
         </motion.div>
 
-        <motion.div {...fadeIn} transition={{ delay: 0.1 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2.5 bg-emerald-50 rounded-xl">
-              <Target size={20} className="text-emerald-600" />
+        <motion.div {...fadeIn} transition={{ delay: 0.2 }} className="bg-gradient-to-br from-slate-900 to-indigo-950 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-bl-[100px] -mr-4 -mt-4 transition-all group-hover:scale-110" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 bg-red-500/20 rounded-2xl border border-red-500/20">
+                <AlertTriangle size={24} className="text-red-400" />
+              </div>
+              <p className="text-[11px] font-black text-red-400 uppercase tracking-[0.2em]">Risk Exposure</p>
             </div>
-            <div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Delivery Predictability</p>
-              <p className="text-3xl font-black text-emerald-600">{deliveryPredictability}%</p>
+            <div className="flex items-end gap-3 mb-2">
+              <p className="text-5xl font-black text-white">{highRiskTeams.length}</p>
+              <p className="text-xs font-bold text-red-300 mb-2 uppercase">Critical Flag</p>
             </div>
-          </div>
-          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${deliveryPredictability}%` }} />
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-4">
+              Out of {projectRisks.length} global projects
+            </p>
           </div>
         </motion.div>
 
-        <motion.div {...fadeIn} transition={{ delay: 0.2 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2.5 bg-red-50 rounded-xl">
-              <AlertTriangle size={20} className="text-red-600" />
+        <motion.div {...fadeIn} transition={{ delay: 0.3 }} className="bg-gradient-to-br from-slate-900 to-indigo-950 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-bl-[100px] -mr-4 -mt-4 transition-all group-hover:scale-110" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 bg-indigo-500/20 rounded-2xl border border-indigo-500/20">
+                <Layers size={24} className="text-indigo-300" />
+              </div>
+              <p className="text-[11px] font-black text-indigo-300 uppercase tracking-[0.2em]">Portfolio Scope</p>
             </div>
-            <div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">High-Risk Projects</p>
-              <p className="text-3xl font-black text-red-600">{highRiskTeams.length}</p>
+            <div className="flex items-end gap-3 mb-2">
+              <p className="text-5xl font-black text-white">{projectRisks.length}</p>
+              <p className="text-xs font-bold text-indigo-400 mb-2 uppercase">Active Hub</p>
             </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-4">Total monitored units</p>
           </div>
-          <p className="text-[10px] font-bold text-gray-400">
-            Out of {projectRisks.length} active projects
-          </p>
-        </motion.div>
-
-        <motion.div {...fadeIn} transition={{ delay: 0.3 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2.5 bg-indigo-50 rounded-xl">
-              <Layers size={20} className="text-indigo-600" />
-            </div>
-            <div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Active Projects</p>
-              <p className="text-3xl font-black text-gray-900">{projectRisks.length}</p>
-            </div>
-          </div>
-          <p className="text-[10px] font-bold text-gray-400">Under your management</p>
         </motion.div>
       </div>
 
@@ -181,7 +187,7 @@ export const ManagerDashboard = () => {
                     <div className="flex items-center gap-2">
                       <div className="w-20 h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${p.risk_score >= 70 ? 'bg-red-500' :
-                            p.risk_score >= 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                          p.risk_score >= 50 ? 'bg-amber-500' : 'bg-emerald-500'
                           }`} style={{ width: `${p.risk_score}%` }} />
                       </div>
                       <span className="text-xs font-black text-gray-700">{p.risk_score}%</span>
@@ -189,9 +195,9 @@ export const ManagerDashboard = () => {
                   </td>
                   <td className="px-6 py-4">
                     <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${p.risk_level === 'critical' ? 'bg-red-50 text-red-600' :
-                        p.risk_level === 'high' ? 'bg-orange-50 text-orange-600' :
-                          p.risk_level === 'medium' ? 'bg-amber-50 text-amber-600' :
-                            'bg-emerald-50 text-emerald-600'
+                      p.risk_level === 'high' ? 'bg-orange-50 text-orange-600' :
+                        p.risk_level === 'medium' ? 'bg-amber-50 text-amber-600' :
+                          'bg-emerald-50 text-emerald-600'
                       }`}>
                       {p.risk_level}
                     </span>

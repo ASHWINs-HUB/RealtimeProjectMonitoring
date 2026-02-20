@@ -254,6 +254,22 @@ class ApiService {
     return this.request('/analytics/escalation-check', { method: 'POST' });
   }
 
+  async getDeliveryVelocity(projectId) {
+    return this.request(`/analytics/project/${projectId}/delivery-velocity`);
+  }
+
+  async getSprintVelocity(projectId) {
+    return this.request(`/analytics/project/${projectId}/sprint-velocity`);
+  }
+
+  async getTeamPerformance(projectId) {
+    return this.request(`/analytics/project/${projectId}/team-performance`);
+  }
+
+  async getMetricsHistory(projectId) {
+    return this.request(`/analytics/project/${projectId}/metrics-history`);
+  }
+
   async verifyAdmin(email, password) {
     return this.request('/auth/verify-admin', {
       method: 'POST',
@@ -265,6 +281,19 @@ class ApiService {
     return this.request('/auth/users', {
       method: 'POST',
       body: JSON.stringify(userData),
+    });
+  }
+
+  async updateUser(userId, userData) {
+    return this.request(`/auth/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(userData),
+    });
+  }
+
+  async deleteUser(userId) {
+    return this.request(`/auth/users/${userId}`, {
+      method: 'DELETE',
     });
   }
 
@@ -287,6 +316,34 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify({ reason })
     });
+  }
+
+  // ============ TEAM MANAGEMENT ============
+  async getMyTeam() {
+    return this.request('/team/my-team');
+  }
+
+  async addTeamMember(memberData) {
+    return this.request('/team/add-member', {
+      method: 'POST',
+      body: JSON.stringify(memberData),
+    });
+  }
+
+  async getTeamStats(teamLeaderId) {
+    return this.request(`/team/team-stats/${teamLeaderId}`);
+  }
+
+  async getManagerTeamLeaders() {
+    return this.request('/team/my-team-leaders');
+  }
+
+  async getHRManagers() {
+    return this.request('/team/managers');
+  }
+
+  async getManagerStatsDetails(managerId) {
+    return this.request(`/team/manager-stats/${managerId}`);
   }
 }
 
