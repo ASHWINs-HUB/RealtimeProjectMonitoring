@@ -37,11 +37,29 @@ export class SyncOrchestrator {
                     try {
                         logger.debug(`[Worker] Processing project: ${project.id}`);
 
-                        // Execute incremental syncing
-                        await Promise.all([
-                            jiraSyncService.syncProject(project.id),
-                            githubSyncService.syncProjectIncremental(project.id)
-                        ]);
+                        // Check if integrations are configured before syncing
+                        const jiraConfigured = process.env.JIRA_BASE_URL && process.env.JIRA_EMAIL && process.env.JIRA_API_TOKEN;
+                        const githubConfigured = process.env.GITHUB_TOKEN;
+
+                        const syncPromises = [];
+                        if (jiraConfigured) {
+                            syncPromises.push(jiraSyncService.syncProject(project.id));
+                        } else {
+                            logger.debug(`[Worker] Skipping Jira sync for project ${project.id} - not configured`);
+                        }
+
+                        if (githubConfigured) {
+                            syncPromises.push(githubSyncService.syncProjectIncremental(project.id));
+                        } else {
+                            logger.debug(`[Worker] Skipping GitHub sync for project ${project.id} - not configured`);
+                        }
+
+                        // Execute incremental syncing only if integrations are configured
+                        if (syncPromises.length > 0) {
+                            await Promise.all(syncPromises);
+                        } else {
+                            logger.info(`[Worker] No integrations configured for project ${project.id} - skipping sync`);
+                        }
                     } catch (err) {
                         logger.error(`[Worker-Error] Project ${project.id}: ${err.message}`);
                     } finally {

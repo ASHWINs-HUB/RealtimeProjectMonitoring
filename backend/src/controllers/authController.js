@@ -110,3 +110,32 @@ export const adminCreateUser = async (req, res, next) => {
         next(error);
     }
 };
+
+// PUT /api/auth/users/:id
+export const updateUser = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const user = await authService.updateUser(id, req.body);
+        res.json({
+            success: true,
+            message: 'User updated successfully',
+            user
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// DELETE /api/auth/users/:id
+export const deleteUser = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        await authService.deleteUser(id);
+        res.json({
+            success: true,
+            message: 'User deleted successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+};

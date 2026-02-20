@@ -55,6 +55,44 @@ export class UserRepository {
             [role, userId]
         );
     }
+
+    async update(userId, userData) {
+        const { name, email, department, is_active } = userData;
+        const updates = [];
+        const params = [];
+        let paramIndex = 1;
+
+        if (name !== undefined) {
+            updates.push(`name = $${paramIndex++}`);
+            params.push(name);
+        }
+        if (email !== undefined) {
+            updates.push(`email = $${paramIndex++}`);
+            params.push(email);
+        }
+        if (department !== undefined) {
+            updates.push(`department = $${paramIndex++}`);
+            params.push(department);
+        }
+        if (is_active !== undefined) {
+            updates.push(`is_active = $${paramIndex++}`);
+            params.push(is_active);
+        }
+
+        if (updates.length === 0) {
+            throw new Error('No fields to update');
+        }
+
+        updates.push(`updated_at = CURRENT_TIMESTAMP`);
+        params.push(userId);
+
+        const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING id, name, email, role, department, is_active, created_at`;
+        return pool.query(query, params);
+    }
+
+    async delete(userId) {
+        return pool.query('UPDATE users SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [userId]);
+    }
 }
 
 export const userRepository = new UserRepository();

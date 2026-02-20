@@ -36,16 +36,6 @@ export const getSprintDelay = async (req, res, next) => {
     }
 };
 
-// GET /api/analytics/project/:projectId/forecast
-export const getCompletionForecast = async (req, res, next) => {
-    try {
-        const forecast = await mlAnalytics.forecastCompletion(req.params.projectId);
-        res.json({ success: true, forecast });
-    } catch (error) {
-        next(error);
-    }
-};
-
 // GET /api/analytics/developer/:userId/performance
 export const getDeveloperPerformance = async (req, res, next) => {
     try {
@@ -112,6 +102,62 @@ export const syncGithubCommits = async (req, res, next) => {
     try {
         const result = await githubService.syncCommitsToDb(req.params.projectId);
         res.json({ success: true, ...result });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// GET /api/analytics/completion-forecast/:projectId
+export const getCompletionForecast = async (req, res, next) => {
+    try {
+        const { projectId } = req.params;
+        const forecast = await mlAnalytics.computeCompletionForecast(projectId);
+        res.json({
+            success: true,
+            forecast
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// GET /api/analytics/delivery-velocity/:projectId
+export const getDeliveryVelocity = async (req, res, next) => {
+    try {
+        const { projectId } = req.params;
+        const velocity = await mlAnalytics.computeDeliveryVelocity(projectId);
+        res.json({
+            success: true,
+            velocity
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// GET /api/analytics/sprint-velocity/:projectId
+export const getSprintVelocity = async (req, res, next) => {
+    try {
+        const { projectId } = req.params;
+        const sprint = await mlAnalytics.computeSprintVelocity(projectId);
+        res.json({
+            success: true,
+            sprint
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// GET /api/analytics/team-performance/:projectId
+export const getTeamPerformance = async (req, res, next) => {
+    try {
+        const { projectId } = req.params;
+        const performance = await mlAnalytics.computeTeamPerformance(projectId);
+        res.json({
+            success: true,
+            performance
+        });
     } catch (error) {
         next(error);
     }
@@ -267,10 +313,10 @@ export const getRoleRiskMetrics = async (req, res, next) => {
             const tasks = await pool.query(`
                 SELECT
                     COUNT(*) as total,
-                    COUNT(CASE WHEN status = 'done' THEN 1 END) as completed,
-                    COUNT(CASE WHEN due_date < CURRENT_DATE AND status != 'done' THEN 1 END) as overdue,
-                    AVG(CASE WHEN status = 'done' AND completed_at IS NOT NULL AND due_date IS NOT NULL
-                        THEN EXTRACT(EPOCH FROM (completed_at - due_date)) / 86400.0 ELSE 0 END) as avg_delay_days
+                    COUNT(CASE WHEN t.status = 'done' THEN 1 END) as completed,
+                    COUNT(CASE WHEN t.due_date < CURRENT_DATE AND t.status != 'done' THEN 1 END) as overdue,
+                    AVG(CASE WHEN t.status = 'done' AND t.completed_at IS NOT NULL AND t.due_date IS NOT NULL
+                        THEN EXTRACT(EPOCH FROM (t.completed_at - t.due_date)) / 86400.0 ELSE 0 END) as avg_delay_days
                 FROM tasks WHERE assigned_to = $1
             `, [userId]);
 
@@ -326,8 +372,8 @@ export const getRoleRiskMetrics = async (req, res, next) => {
             const sprintData = await pool.query(`
                 SELECT
                     COUNT(*) as total_tasks,
-                    COUNT(CASE WHEN due_date < CURRENT_DATE AND status != 'done' THEN 1 END) as delayed,
-                    COUNT(CASE WHEN status = 'blocked' THEN 1 END) as blocked
+                    COUNT(CASE WHEN t.due_date < CURRENT_DATE AND t.status != 'done' THEN 1 END) as delayed,
+                    COUNT(CASE WHEN t.status = 'blocked' THEN 1 END) as blocked
                 FROM tasks t
                 JOIN scopes s ON s.id = t.scope_id
                 WHERE s.team_leader_id = $1

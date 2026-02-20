@@ -581,6 +581,237 @@ class MLAnalyticsEngine {
         }
         logger.info('ML Batch compute finished.');
     }
+
+    async computeDeliveryVelocity(projectId) {
+        try {
+            // Get recent task completion data for velocity calculation
+            const taskHistory = await pool.query(`
+                SELECT 
+                    t.completed_at,
+                    t.created_at,
+                    t.due_date,
+                    t.status
+                FROM tasks t
+                WHERE t.project_id = $1 
+                AND t.status = 'done'
+                AND t.completed_at IS NOT NULL
+                ORDER BY t.completed_at DESC
+                LIMIT 20
+            `, [projectId]);
+
+            if (taskHistory.rows.length < 2) {
+                return {
+                    velocity: 0,
+                    velocity_trend: 'insufficient_data',
+                    avg_completion_time: 0,
+                    tasks_per_week: 0
+                };
+            }
+
+            // Calculate completion velocity (tasks per week)
+            const now = new Date();
+            const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            
+            const recentTasks = taskHistory.rows.filter(task => 
+                new Date(task.completed_at) > oneWeekAgo
+            );
+
+            const tasksPerWeek = recentTasks.length / 1; // Average tasks completed per week
+            const avgCompletionTime = this.calculateAverageCompletionTime(taskHistory.rows);
+
+            // Determine velocity trend
+            let velocityTrend = 'stable';
+            if (tasksPerWeek > 5) velocityTrend = 'high';
+            else if (tasksPerWeek > 3) velocityTrend = 'good';
+            else if (tasksPerWeek > 1) velocityTrend = 'low';
+            else velocityTrend = 'very_low';
+
+            return {
+                velocity: Math.round(tasksPerWeek * 10) / 10, // Scale to 0-100
+                velocity_trend: velocityTrend,
+                avg_completion_time: avgCompletionTime,
+                tasks_per_week: Math.round(tasksPerWeek * 10) / 10,
+                recent_performance: recentTasks.slice(0, 5).map(task => ({
+                    task_id: task.id,
+                    completion_time: task.completed_at,
+                    efficiency: this.calculateTaskEfficiency(task)
+                }))
+            };
+        } catch (error) {
+            logger.error('Delivery velocity calculation failed:', error);
+            throw error;
+        }
+    }
+
+    async computeSprintVelocity(projectId) {
+        try {
+            // Get sprint data for velocity calculation
+            const sprintData = await pool.query(`
+                SELECT 
+                    s.id as sprint_id,
+                    s.name as sprint_name,
+                    s.start_date,
+                    s.end_date,
+                    COUNT(t.id) as total_tasks,
+                    COUNT(CASE WHEN t.status = 'done' THEN 1 END) as completed_tasks,
+                    AVG(EXTRACT(EPOCH FROM (t.completed_at - t.created_at))) as avg_cycle_time
+                FROM sprints s
+                LEFT JOIN tasks t ON t.sprint_id = s.id
+                WHERE s.project_id = $1
+                GROUP BY s.id, s.name, s.start_date, s.end_date
+                ORDER BY s.end_date DESC
+                LIMIT 10
+            `, [projectId]);
+
+            if (sprintData.rows.length === 0) {
+                return {
+                    sprint_velocity: 0,
+                    velocity_trend: 'no_sprints',
+                    avg_sprint_duration: 0,
+                    completion_rate: 0
+                };
+            }
+
+            // Calculate sprint velocity (story points per sprint)
+            const avgCompletionRate = sprintData.rows.reduce((sum, sprint) => 
+                sum + (sprint.completed_tasks / Math.max(1, sprint.total_tasks)), 0
+            ) / sprintData.rows.length;
+
+            const avgSprintDuration = sprintData.rows.reduce((sum, sprint) => {
+                const duration = sprint.end_date ? 
+                    Math.ceil((new Date(sprint.end_date) - new Date(sprint.start_date)) / (1000 * 60 * 60 * 24)) : 0;
+                return sum + duration;
+            }, 0) / sprintData.rows.length;
+
+            // Determine velocity trend
+            let velocityTrend = 'stable';
+            if (avgCompletionRate > 0.8) velocityTrend = 'excellent';
+            else if (avgCompletionRate > 0.6) velocityTrend = 'good';
+            else if (avgCompletionRate > 0.4) velocityTrend = 'moderate';
+            else if (avgCompletionRate > 0.2) velocityTrend = 'low';
+            else velocityTrend = 'very_low';
+
+            return {
+                sprint_velocity: Math.round(avgCompletionRate * 100),
+                velocity_trend: velocityTrend,
+                avg_sprint_duration: Math.round(avgSprintDuration),
+                completion_rate: Math.round(avgCompletionRate * 100),
+                recent_sprints: sprintData.rows.slice(0, 5).map(sprint => ({
+                    sprint_id: sprint.sprint_id,
+                    sprint_name: sprint.sprint_name,
+                    completion_rate: Math.round((sprint.completed_tasks / Math.max(1, sprint.total_tasks)) * 100),
+                    duration_days: sprint.end_date ? Math.ceil((new Date(sprint.end_date) - new Date(sprint.start_date)) / (1000 * 60 * 60 * 24)) : 0
+                }))
+            };
+        } catch (error) {
+            logger.error('Sprint velocity calculation failed:', error);
+            throw error;
+        }
+    }
+
+    async computeTeamPerformance(projectId) {
+        try {
+            // Get team member performance data
+            const teamData = await pool.query(`
+                SELECT 
+                    u.id,
+                    u.name,
+                    u.role,
+                    COUNT(t.id) as total_tasks,
+                    COUNT(CASE WHEN t.status = 'done' THEN 1 END) as completed_tasks,
+                    AVG(EXTRACT(EPOCH FROM (CASE WHEN t.completed_at IS NOT NULL AND t.due_date IS NOT NULL 
+                        THEN (t.completed_at - t.due_date) ELSE 0 END))) / 86400) as avg_delay_hours,
+                    COUNT(CASE WHEN t.status = 'blocked' THEN 1 END) as blocked_tasks
+                FROM users u
+                LEFT JOIN tasks t ON t.assigned_to = u.id
+                LEFT JOIN project_managers pm ON pm.project_id = t.project_id
+                LEFT JOIN scopes s ON s.id = t.scope_id
+                WHERE pm.project_id = $1 
+                AND u.role IN ('developer', 'team_leader')
+                AND u.is_active = true
+                GROUP BY u.id, u.name, u.role
+            `, [projectId]);
+
+            if (teamData.rows.length === 0) {
+                return {
+                    team_performance: [],
+                    avg_task_completion_rate: 0,
+                    avg_delay_hours: 0,
+                    blocked_task_rate: 0
+                };
+            }
+
+            // Calculate team performance metrics
+            const teamPerformance = teamData.map(member => {
+                const completionRate = member.total_tasks > 0 ? 
+                    (member.completed_tasks / member.total_tasks) * 100 : 0;
+                
+                let performanceLevel = 'needs_improvement';
+                if (completionRate >= 90) performanceLevel = 'excellent';
+                else if (completionRate >= 75) performanceLevel = 'good';
+                else if (completionRate >= 60) performanceLevel = 'moderate';
+                else if (completionRate >= 40) performanceLevel = 'poor';
+
+                return {
+                    user_id: member.id,
+                    name: member.name,
+                    role: member.role,
+                    total_tasks: member.total_tasks,
+                    completed_tasks: member.completed_tasks,
+                    completion_rate: Math.round(completionRate),
+                    avg_delay_hours: Math.round(member.avg_delay_hours || 0),
+                    blocked_tasks: member.blocked_tasks,
+                    performance_level: performanceLevel
+                };
+            });
+
+            const avgCompletionRate = teamData.reduce((sum, member) => 
+                sum + (member.completed_tasks / Math.max(1, member.total_tasks)), 0
+            ) / teamData.length;
+
+            const avgDelayHours = teamData.reduce((sum, member) => 
+                sum + (member.avg_delay_hours || 0), 0
+            ) / teamData.length;
+
+            const blockedTaskRate = teamData.reduce((sum, member) => 
+                sum + member.blocked_tasks, 0
+            ) / teamData.length;
+
+            return {
+                team_performance: teamPerformance,
+                avg_task_completion_rate: Math.round(avgCompletionRate * 100),
+                avg_delay_hours: Math.round(avgDelayHours),
+                blocked_task_rate: Math.round(blockedTaskRate)
+            };
+        } catch (error) {
+            logger.error('Team performance calculation failed:', error);
+            throw error;
+        }
+    }
+
+    calculateAverageCompletionTime(tasks) {
+        if (tasks.length === 0) return 0;
+        
+        const completionTimes = tasks
+            .filter(task => task.completed_at && task.created_at)
+            .map(task => new Date(task.completed_at) - new Date(task.created_at))
+            .map(time => time / (1000 * 60 * 60 * 24)); // Convert to days
+
+        const avgTime = completionTimes.reduce((sum, time) => sum + time, 0) / completionTimes.length;
+        return Math.round(avgTime * 10) / 10; // Return in days with 1 decimal
+    }
+
+    calculateTaskEfficiency(task) {
+        if (!task.due_date || !task.completed_at) return 100;
+        
+        const plannedTime = new Date(task.due_date) - new Date(task.created_at);
+        const actualTime = new Date(task.completed_at) - new Date(task.created_at);
+        
+        if (plannedTime <= 0) return 100;
+        
+        const efficiency = Math.min(100, Math.round((actualTime / plannedTime) * 100));
+        return efficiency;
+    }
 }
 
 export const mlAnalytics = new MLAnalyticsEngine();

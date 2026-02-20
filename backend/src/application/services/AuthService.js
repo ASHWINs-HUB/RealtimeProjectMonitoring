@@ -144,6 +144,22 @@ export class AuthService {
         }
         return result.rows[0];
     }
+
+    async updateUser(userId, userData) {
+        const result = await userRepository.update(userId, userData);
+        if (result.rowCount === 0) {
+            throw new Error('User not found.');
+        }
+        return result.rows[0];
+    }
+
+    async deleteUser(userId) {
+        const result = await userRepository.delete(userId);
+        if (result.rowCount === 0) {
+            throw new Error('User not found.');
+        }
+        return { deleted: true };
+    }
 }
 
 export const authService = new AuthService();
