@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 import {
     getMyTeam, addTeamMember, getTeamStats,
-    getManagerTeamLeaders, getHRManagers, getManagerStats
+    getManagerTeamLeaders, getHRManagers, getManagerStats,
+    getAvailableDeveloperPool, hireAndAssignDeveloper
 } from '../controllers/teamController.js';
 
 const router = Router();
@@ -22,4 +23,9 @@ router.get('/my-team-leaders', authorizeRoles('manager', 'admin'), getManagerTea
 router.get('/managers', authorizeRoles('hr', 'admin'), getHRManagers);
 router.get('/manager-stats/:managerId', authorizeRoles('hr', 'admin'), getManagerStats);
 
+// AI Hire: pool of pre-filled developer candidates + hire action
+router.get('/hire-pool', getAvailableDeveloperPool);
+router.post('/hire-and-assign', authorizeRoles('hr', 'manager', 'admin', 'team_leader'), hireAndAssignDeveloper);
+
 export default router;
+

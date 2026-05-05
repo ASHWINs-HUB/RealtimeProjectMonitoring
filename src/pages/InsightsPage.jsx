@@ -94,7 +94,7 @@ export const InsightsPage = () => {
                             className="bg-white rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 transition-all overflow-hidden flex flex-col md:flex-row"
                         >
                             <div className={`md:w-3 center flex items-center justify-center ${insight.severity === 'high' ? 'bg-rose-500' :
-                                    insight.severity === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'
+                                insight.severity === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'
                                 }`} />
 
                             <div className="p-8 flex-1">

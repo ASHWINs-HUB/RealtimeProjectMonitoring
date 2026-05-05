@@ -8,8 +8,9 @@ import { RiskAlertBanner, RiskScoreGauge } from '@/components/ui/RiskAlerts';
 import {
   CheckCircle2, BarChart3, Award, Zap, ExternalLink,
   Loader2, ListChecks, RefreshCw, GitCommit, GitPullRequest,
-  Clock, Bug, TrendingUp, Activity
+  Clock, Bug, TrendingUp, Activity, Trophy
 } from 'lucide-react';
+import { BadgeGrid } from '@/components/profile/BadgeGrid';
 
 /**
  * Developer Dashboard — Role-specific
@@ -67,6 +68,15 @@ export const DeveloperDashboard = () => {
     setDismissedAlerts(prev => [...prev, index]);
   };
 
+  const getReputationLevel = (score) => {
+    if (score >= 5000) return 'Legend';
+    if (score >= 4000) return 'Master';
+    if (score >= 3500) return 'Expert';
+    if (score >= 3000) return 'Veteran';
+    if (score >= 1000) return 'Junior';
+    return 'Rookie';
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -79,7 +89,7 @@ export const DeveloperDashboard = () => {
   const riskScore = metrics?.personal_risk_score ?? 0;
   const thresholds = metrics?.thresholds || { warning: 40, danger: 60 };
   const alerts = (metrics?.alerts || []).filter((_, i) => !dismissedAlerts.includes(i));
-  const commitStats = metrics?.commit_stats || {};
+  // Removed commitStats
   const taskStats = metrics?.task_stats || {};
   const burnout = metrics?.burnout || {};
 
@@ -94,11 +104,16 @@ export const DeveloperDashboard = () => {
       {/* Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">
+          <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
             My Dashboard
           </h1>
           <p className="text-gray-500 font-medium">
             Personal performance & risk metrics
+            {user?.salary > 0 && (
+              <span className="ml-3 px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase rounded-full tracking-widest">
+                Monthly Salary: ${user.salary.toLocaleString()}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -130,28 +145,28 @@ export const DeveloperDashboard = () => {
           <RiskScoreGauge score={riskScore} label="Personal Risk" size="lg" thresholds={thresholds} />
           <div className="mt-4 text-center">
             <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${metrics?.risk_level === 'danger' ? 'bg-red-500/20 text-red-300' :
-                metrics?.risk_level === 'warning' ? 'bg-amber-500/20 text-amber-300' :
-                  'bg-emerald-500/20 text-emerald-300'
+              metrics?.risk_level === 'warning' ? 'bg-amber-500/20 text-amber-300' :
+                'bg-emerald-500/20 text-emerald-300'
               }`}>
               {metrics?.risk_level === 'danger' ? 'High Risk' : metrics?.risk_level === 'warning' ? 'Moderate Risk' : 'Low Risk'}
             </span>
           </div>
         </motion.div>
 
-        {/* Stat Cards */}
-        <motion.div {...fadeIn} transition={{ delay: 0.1 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm">
+        {/* Professional Reputation Points Card */}
+        <motion.div {...fadeIn} transition={{ delay: 0.1 }} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm group hover:border-indigo-100 transition-colors">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2.5 bg-blue-50 rounded-xl">
-              <GitCommit size={20} className="text-blue-600" />
+            <div className="p-2.5 bg-indigo-50 rounded-xl group-hover:bg-indigo-100 transition-colors">
+              <Trophy size={20} className="text-indigo-600" />
             </div>
             <div>
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Commit Frequency</p>
-              <p className="text-2xl font-black text-gray-900">{parseInt(commitStats.monthly) || 0}</p>
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Professional Score</p>
+              <p className="text-2xl font-black text-gray-900">{user?.reputation_score || 3000}</p>
             </div>
           </div>
-          <div className="flex justify-between text-[10px] font-bold text-gray-400">
-            <span>Weekly: {parseInt(commitStats.weekly) || 0}</span>
-            <span>Total: {parseInt(commitStats.total) || 0}</span>
+          <div className="flex items-center gap-1.5 text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50/50 w-fit px-2 py-1 rounded-lg">
+            <Zap size={10} />
+            <span>Title: {getReputationLevel(user?.reputation_score || 3000)}</span>
           </div>
         </motion.div>
 
@@ -202,72 +217,47 @@ export const DeveloperDashboard = () => {
             </div>
           </div>
           <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${burnout.level === 'critical' ? 'bg-red-50 text-red-600' :
-              burnout.level === 'moderate' ? 'bg-amber-50 text-amber-600' :
-                'bg-emerald-50 text-emerald-600'
+            burnout.level === 'moderate' ? 'bg-amber-50 text-amber-600' :
+              'bg-emerald-50 text-emerald-600'
             }`}>{burnout.level || 'low'}</span>
         </motion.div>
       </div>
 
-      {/* Performance Details */}
-      {performance && (
-        <motion.div {...fadeIn} transition={{ delay: 0.5 }} className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
-          <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-6 flex items-center gap-2">
-            <Award size={18} className="text-indigo-600" />
-            Performance Breakdown
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className={`w-24 h-24 mx-auto rounded-full flex items-center justify-center ring-4 ${performance.score >= 80 ? 'bg-emerald-50 ring-emerald-200' :
-                  performance.score >= 60 ? 'bg-amber-50 ring-amber-200' :
-                    'bg-red-50 ring-red-200'
-                }`}>
-                <span className={`text-3xl font-black ${performance.score >= 80 ? 'text-emerald-700' :
-                    performance.score >= 60 ? 'text-amber-700' :
-                      'text-red-700'
-                  }`}>{performance.score}</span>
+      {/* Badges & Achievements */}
+      <motion.div {...fadeIn} transition={{ delay: 0.6 }} className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+        <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-6 flex items-center gap-2">
+          <Award size={18} className="text-indigo-600" />
+          Badges & Achievements
+        </h3>
+        <BadgeGrid badges={metrics?.badges} />
+      </motion.div>
+
+      {/* Skills Matrix */}
+      <motion.div {...fadeIn} transition={{ delay: 0.7 }} className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+        <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest mb-6 flex items-center gap-2">
+          <TrendingUp size={18} className="text-emerald-600" />
+          Professional Skills Matrix
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {(metrics?.skills || []).map((skill, idx) => (
+            <div key={idx} className="space-y-2">
+              <div className="flex justify-between items-center px-1">
+                <span className="text-[11px] font-black text-slate-700 uppercase tracking-wider">{skill.skill_name}</span>
+                <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full uppercase">Lvl {skill.proficiency_level}</span>
               </div>
-              <p className="mt-2 text-xs font-black text-gray-400 uppercase tracking-widest">
-                Overall Score
-              </p>
-              <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full mt-1 inline-block ${performance.level === 'excellent' ? 'bg-emerald-50 text-emerald-600' :
-                  performance.level === 'good' ? 'bg-blue-50 text-blue-600' :
-                    'bg-amber-50 text-amber-600'
-                }`}>{performance.level}</span>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
-                  <span>Tasks Completed</span>
-                  <span>{performance.stats?.completed_tasks || 0}</span>
-                </div>
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 rounded-full" style={{
-                    width: `${performance.stats?.total_tasks > 0 ? (performance.stats.completed_tasks / performance.stats.total_tasks) * 100 : 0}%`
-                  }} />
-                </div>
+              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full transition-all"
+                  style={{ width: `${skill.proficiency_level * 10}%` }}
+                />
               </div>
-              <div>
-                <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
-                  <span>Story Points</span>
-                  <span>{performance.stats?.points_delivered || 0} pts</span>
-                </div>
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-purple-500 rounded-full" style={{ width: '100%' }} />
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-col items-center justify-center bg-gray-50 rounded-2xl p-6">
-              <Zap size={24} className="text-indigo-600 mb-2" />
-              <p className="text-xs font-black text-gray-400 uppercase tracking-widest text-center">
-                Total Tasks
-              </p>
-              <p className="text-3xl font-black text-gray-900">
-                {performance.stats?.total_tasks || 0}
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter px-1">
+                Total XP: {skill.total_xp}
               </p>
             </div>
-          </div>
-        </motion.div>
-      )}
+          ))}
+        </div>
+      </motion.div>
     </div>
   );
 };

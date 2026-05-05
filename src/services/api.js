@@ -92,6 +92,13 @@ class ApiService {
     return this.request(`/auth/users${query}`);
   }
 
+  async updateUser(userId, userData) {
+    return this.request(`/auth/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(userData),
+    });
+  }
+
   logout() {
     this.removeToken();
   }
@@ -344,6 +351,18 @@ class ApiService {
 
   async getManagerStatsDetails(managerId) {
     return this.request(`/team/manager-stats/${managerId}`);
+  }
+
+  async getHirePool(role) {
+    const q = role ? `?role=${encodeURIComponent(role)}` : '';
+    return this.request(`/team/hire-pool${q}`);
+  }
+
+  async hireAndAssign(data) {
+    return this.request('/team/hire-and-assign', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 }
 

@@ -6,7 +6,7 @@ import { useToast } from '@/components/ui/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     BarChart3, Calendar, CheckCircle2, Clock, GitBranch,
-    LayoutDashboard, ListChecks, Target, AlertTriangle,
+    LayoutDashboard, ListChecks, Target, AlertTriangle, AlertCircle,
     Github, Send, Zap, ChevronRight, Activity, TrendingUp,
     FileText, Users, Plus, Loader2, ArrowLeft, X,
     TrendingDown, Gauge, Rocket, Timer, ZapOff
@@ -44,6 +44,15 @@ export const ProjectDetailPage = () => {
     const [submitting, setSubmitting] = useState(false);
     const [newScope, setNewScope] = useState({ title: '', description: '', team_leader_id: '', deadline: '' });
     const [newTask, setNewTask] = useState({ title: '', description: '', assigned_to: '', priority: 'medium', deadline: '' });
+
+    // ── Hire Developer Modal state ──────────────────────────────────
+    const [showHireModal, setShowHireModal] = useState(false);
+    const [hireRec, setHireRec] = useState(null);       // { role, reason }
+    const [hireCandidates, setHireCandidates] = useState([]);
+    const [selectedCandidate, setSelectedCandidate] = useState(null);
+    const [hireTaskTitle, setHireTaskTitle] = useState('');
+    const [hiringInProgress, setHiringInProgress] = useState(false);
+
 
     const fetchData = useCallback(async () => {
         try {
@@ -141,6 +150,43 @@ export const ProjectDetailPage = () => {
             toast.error(error.message || 'Failed to create task');
         } finally {
             setSubmitting(false);
+        }
+    };
+
+    // ── Hire Modal handlers ─────────────────────────────────────────
+    const openHireModal = async (rec) => {
+        setHireRec(rec);
+        setSelectedCandidate(null);
+        setHireTaskTitle(`Onboarding task for new ${rec.role}`);
+        setShowHireModal(true);
+        try {
+            const data = await api.getHirePool(rec.role);
+            setHireCandidates(data.candidates || []);
+        } catch {
+            setHireCandidates([]);
+        }
+    };
+
+    const handleHireConfirm = async () => {
+        if (!selectedCandidate) { toast.error('Please select a candidate first'); return; }
+        setHiringInProgress(true);
+        try {
+            await api.hireAndAssign({
+                name: selectedCandidate.name,
+                email: selectedCandidate.email,
+                projectId: id,
+                taskTitle: hireTaskTitle || `Initial task for ${selectedCandidate.name}`,
+                taskDescription: `Auto-assigned by AI Hire. Role: ${hireRec?.role}. Skills: ${(selectedCandidate.skills || []).join(', ')}.`,
+                role: hireRec?.role,
+                department: 'Engineering',
+            });
+            toast.success(`🎉 ${selectedCandidate.name} hired & assigned to project!`);
+            setShowHireModal(false);
+            fetchData();
+        } catch (err) {
+            toast.error(err.message || 'Hire failed');
+        } finally {
+            setHiringInProgress(false);
         }
     };
 
@@ -910,21 +956,173 @@ export const ProjectDetailPage = () => {
                                     </div>
                                 )}
 
-                                {/* AI Recommendation */}
+                                {/* AI Recommendation & Deep Insights */}
                                 <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}
-                                    className="bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 p-8 rounded-[2rem] border border-indigo-100">
-                                    <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-3">
-                                        <Zap size={20} className="text-indigo-600" /> AI Recommendation
+                                    className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2" />
+
+                                    <h3 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-3 relative z-10">
+                                        <div className="p-2 bg-indigo-100 rounded-lg">
+                                            <Zap size={20} className="text-indigo-600" />
+                                        </div>
+                                        AI Insights & Jira Metrics
                                     </h3>
-                                    <p className="text-sm text-gray-700 leading-relaxed italic">
-                                        "Based on a {risk?.score || 0}% risk score{risk?.source === 'xgboost' ? ' (XGBoost ML model)' : ''} and current velocity of {deliveryVelocity?.velocity || 0} tasks/week,{' '}
-                                        {(risk?.score || 0) > 50
-                                            ? 'we recommend re-evaluating critical path tasks, increasing dev capacity, and addressing blocked items immediately.'
-                                            : (risk?.score || 0) > 25
-                                                ? 'the project is progressing well but monitor overdue tasks and schedule pressure closely.'
-                                                : 'the project is in excellent health. Continue with the current sprint plan as all factors are stable.'}
-                                        {forecast?.on_track ? '' : ` The ML model predicts the project may need an additional ${forecast?.estimated_days || 0} days beyond the target deadline.`}"
-                                    </p>
+
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 relative z-10">
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Project Gap</p>
+                                            <p className={`text-2xl font-black ${(risk?.factors?.project_gap || 0) > 0.2 ? 'text-red-500' : 'text-slate-700'}`}>
+                                                {Math.round((risk?.factors?.project_gap || 0) * 100)}%
+                                            </p>
+                                            <p className="text-[9px] text-slate-400 mt-1">Planned vs Actual</p>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Deadline Prs.</p>
+                                            <p className={`text-2xl font-black ${(risk?.factors?.deadline_pressure || 0) > 80 ? 'text-red-500' : 'text-slate-700'}`}>
+                                                {Math.round(risk?.factors?.deadline_pressure || 0)}%
+                                            </p>
+                                            <p className="text-[9px] text-slate-400 mt-1">Time Urgency</p>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Bug Density</p>
+                                            <p className={`text-2xl font-black ${(risk?.factors?.bug_density || 0) > 15 ? 'text-amber-500' : 'text-slate-700'}`}>
+                                                {Math.round(risk?.factors?.bug_density || 0)}%
+                                            </p>
+                                            <p className="text-[9px] text-slate-400 mt-1">Blocked / Total</p>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Workload Ratio</p>
+                                            <p className={`text-2xl font-black ${(risk?.factors?.workload_ratio || 0) > 3 ? 'text-red-500' : 'text-slate-700'}`}>
+                                                {risk?.factors?.workload_ratio || 0}
+                                            </p>
+                                            <p className="text-[9px] text-slate-400 mt-1">Tasks / Dev</p>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Velocity Drop</p>
+                                            <p className={`text-2xl font-black ${(risk?.factors?.velocity_drop || 0) > 20 ? 'text-red-500' : 'text-slate-700'}`}>
+                                                {risk?.factors?.velocity_drop || 0}%
+                                            </p>
+                                            <p className="text-[9px] text-slate-400 mt-1">Trend Decline</p>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Stagnation</p>
+                                            <p className={`text-2xl font-black ${(risk?.factors?.stagnation_days || 0) > 5 ? 'text-amber-500' : 'text-slate-700'}`}>
+                                                {Math.round(risk?.factors?.stagnation_days || 0)}d
+                                            </p>
+                                            <p className="text-[9px] text-slate-400 mt-1">Max In-Progress</p>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 col-span-2">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Dependency Blocked</p>
+                                            <div className="flex items-end justify-between">
+                                                <p className={`text-2xl font-black ${(risk?.factors?.dependency_blocked || 0) > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                                    {risk?.factors?.dependency_blocked || 0} Tasks
+                                                </p>
+                                                <div className="flex -space-x-2">
+                                                    {[...Array(Math.min(3, risk?.factors?.dependency_blocked || 0))].map((_, i) => (
+                                                        <div key={i} className="w-6 h-6 rounded-full bg-red-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-red-600">!</div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 7 Factor Status Chips — compact grid */}
+                                    {risk?.suggestions && risk.suggestions.length > 0 && (
+                                        <div className="relative z-10 mb-5">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                    <Zap size={10} className="text-amber-400" />
+                                                    7 AI Factors
+                                                </p>
+                                                <div className="flex items-center gap-2 text-[10px] font-bold">
+                                                    {risk.suggestions.filter(s => s.status === 'critical').length > 0 && (
+                                                        <span className="flex items-center gap-1 text-red-600">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                                                            {risk.suggestions.filter(s => s.status === 'critical').length} critical
+                                                        </span>
+                                                    )}
+                                                    {risk.suggestions.filter(s => s.status === 'warning').length > 0 && (
+                                                        <span className="flex items-center gap-1 text-amber-600">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                                                            {risk.suggestions.filter(s => s.status === 'warning').length} warning
+                                                        </span>
+                                                    )}
+                                                    {risk.suggestions.filter(s => s.status === 'good').length > 0 && (
+                                                        <span className="flex items-center gap-1 text-emerald-600">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                                                            {risk.suggestions.filter(s => s.status === 'good').length} healthy
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Chips grid — 2 columns */}
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {risk.suggestions.map((item, idx) => {
+                                                    const isCritical = item.status === 'critical';
+                                                    const isWarning = item.status === 'warning';
+                                                    const chipBg = isCritical ? 'bg-red-50 border-red-200' : isWarning ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200';
+                                                    const dotColor = isCritical ? 'bg-red-500' : isWarning ? 'bg-amber-400' : 'bg-emerald-400';
+                                                    const labelColor = isCritical ? 'text-red-700' : isWarning ? 'text-amber-700' : 'text-emerald-700';
+                                                    const valueColor = isCritical ? 'text-red-900' : isWarning ? 'text-amber-900' : 'text-emerald-900';
+
+                                                    return (
+                                                        <div key={idx} className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${chipBg}`}>
+                                                            <span className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className={`text-[10px] font-bold truncate ${labelColor}`}>{item.factor}</p>
+                                                                <p className={`text-xs font-black ${valueColor}`}>{item.value}</p>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Short AI Summary */}
+                                    <div className="p-3.5 bg-gradient-to-br from-indigo-50 via-purple-50 to-blue-50 rounded-2xl border border-indigo-100 relative z-10 mb-3">
+                                        <div className="flex items-start gap-2.5">
+                                            <span className="text-lg shrink-0 mt-0.5">🧠</span>
+                                            <div>
+                                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">AI Summary</p>
+                                                <p className="text-xs text-indigo-900 font-semibold leading-relaxed">
+                                                    {risk?.summary ||
+                                                        `${(risk?.score || 0) > 50 ? '⚠️ Elevated risk' : '✅ On track'} — Score: ${risk?.score || 0}%. Monitor key factors.`
+                                                    }
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* HR Hire Recommendations — interactive */}
+                                    {risk?.hire && risk.hire.length > 0 && (
+                                        <div className="p-3.5 bg-gradient-to-br from-rose-50 to-orange-50 rounded-2xl border border-rose-100 relative z-10">
+                                            <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
+                                                <span>👥</span> AI Hire Recommendations
+                                            </p>
+                                            <div className="flex flex-col gap-2">
+                                                {risk.hire.map((h, i) => (
+                                                    <div key={i} className="flex items-center justify-between gap-2 bg-white/80 rounded-xl px-3 py-2 border border-rose-100">
+                                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                                            <span className="w-2 h-2 rounded-full bg-rose-400 shrink-0" />
+                                                            <div className="min-w-0">
+                                                                <p className="text-xs font-black text-gray-800 truncate">{h.role}</p>
+                                                                <p className="text-[10px] text-rose-500 font-semibold">{h.reason}</p>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => openHireModal(h)}
+                                                            className="shrink-0 flex items-center gap-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black px-3 py-1.5 rounded-lg transition-all shadow-sm hover:shadow-md active:scale-95"
+                                                        >
+                                                            <Users size={10} /> Hire →
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
                                 </motion.section>
                             </>);
                         })()}
@@ -1134,6 +1332,125 @@ export const ProjectDetailPage = () => {
                     )
                 }
             </AnimatePresence >
+
+            {/* ── Hire Developer Modal ──────────────────────────────────────── */}
+            {showHireModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <motion.div
+                        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                        exit={{ scale: 0.9, opacity: 0 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+                    >
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-rose-500 to-orange-500 px-6 py-5 flex items-center justify-between">
+                            <div>
+                                <p className="text-[10px] font-black text-rose-200 uppercase tracking-widest mb-1">AI Hire — {project?.name}</p>
+                                <h2 className="text-lg font-black text-white">Hire {hireRec?.role}</h2>
+                                <p className="text-[11px] text-rose-100 mt-0.5">📊 Reason: {hireRec?.reason}</p>
+                            </div>
+                            <button onClick={() => setShowHireModal(false)} className="text-white/70 hover:text-white transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                            {/* Candidates */}
+                            <div>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
+                                    Available Candidates ({hireCandidates.length})
+                                </p>
+                                {hireCandidates.length === 0 ? (
+                                    <div className="flex items-center justify-center py-6">
+                                        <Loader2 size={20} className="animate-spin text-rose-400" />
+                                        <span className="ml-2 text-sm text-gray-400">Loading candidates...</span>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2.5">
+                                        {hireCandidates.map((c, idx) => {
+                                            const isSelected = selectedCandidate?.email === c.email;
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    onClick={() => setSelectedCandidate(c)}
+                                                    className={`cursor-pointer rounded-2xl border-2 p-3.5 transition-all ${isSelected
+                                                            ? 'border-rose-400 bg-rose-50 shadow-md'
+                                                            : 'border-gray-100 bg-gray-50/60 hover:border-rose-200 hover:bg-rose-50/30'
+                                                        }`}
+                                                >
+                                                    <div className="flex items-start gap-3">
+                                                        {/* Avatar */}
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${isSelected ? 'bg-rose-500 text-white' : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white'
+                                                            }`}>
+                                                            {c.avatar}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <p className="text-sm font-black text-gray-900">{c.name}</p>
+                                                                {isSelected && (
+                                                                    <span className="text-[9px] font-black bg-rose-500 text-white px-2 py-0.5 rounded-full">✓ SELECTED</span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-[10px] text-gray-400 mb-2">{c.email}</p>
+                                                            <div className="flex flex-wrap gap-1 mb-2">
+                                                                {(c.skills || []).map((s, si) => (
+                                                                    <span key={si} className="text-[9px] font-bold bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-md">{s}</span>
+                                                                ))}
+                                                            </div>
+                                                            <div className="flex items-center gap-3 text-[10px] text-gray-500 font-semibold">
+                                                                <span>🕒 {c.exp}</span>
+                                                                <span>💼 {c.rate}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Task to assign */}
+                            {selectedCandidate && (
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">First Task to Assign</p>
+                                    <input
+                                        type="text"
+                                        value={hireTaskTitle}
+                                        onChange={e => setHireTaskTitle(e.target.value)}
+                                        placeholder="e.g. Set up QA environment and write initial test cases"
+                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-rose-400 outline-none transition-all"
+                                    />
+                                    <p className="text-[10px] text-gray-400 mt-1.5 ml-1">This task will appear under the project immediately after hiring.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-5 py-4 border-t border-gray-100 flex items-center gap-3">
+                            <button
+                                onClick={() => setShowHireModal(false)}
+                                className="flex-1 py-3 border border-gray-200 text-gray-600 font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-gray-50 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleHireConfirm}
+                                disabled={!selectedCandidate || hiringInProgress}
+                                className="flex-1 py-3 bg-gradient-to-r from-rose-500 to-orange-500 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:from-rose-600 hover:to-orange-600 transition-all disabled:opacity-40 flex items-center justify-center gap-2 shadow-lg"
+                            >
+                                {hiringInProgress ? (
+                                    <><Loader2 size={14} className="animate-spin" /> Hiring…</>
+                                ) : (
+                                    <><Users size={14} /> Confirm Hire</>
+                                )}
+                            </button>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
         </div >
+
     );
 };

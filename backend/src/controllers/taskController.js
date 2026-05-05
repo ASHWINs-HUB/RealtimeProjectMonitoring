@@ -2,6 +2,7 @@ import pool from '../config/database.js';
 import logger from '../utils/logger.js';
 import { jiraService } from '../services/jiraService.js';
 import { githubService } from '../services/githubService.js';
+import { gamificationService } from '../services/gamificationService.js';
 
 // POST /api/projects/:projectId/scopes - Manager creates scope for team leader
 export const createScope = async (req, res, next) => {
@@ -294,6 +295,11 @@ export const updateTaskStatus = async (req, res, next) => {
             'UPDATE projects SET progress = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             [progress, task.project_id]
         );
+
+        // Gamification evaluation
+        if (status === 'done') {
+            await gamificationService.evaluateTaskCompletion(task);
+        }
 
         await client.query('COMMIT');
 

@@ -115,6 +115,19 @@ export const adminCreateUser = async (req, res, next) => {
 export const updateUser = async (req, res, next) => {
     try {
         const { id } = req.params;
+        const requestingUser = req.user;
+
+        // Security Check: Only allow self-update OR high-level roles (admin, hr, manager)
+        const isSelf = requestingUser.id == id;
+        const hasElevatedPrivileged = ['admin', 'hr', 'manager'].includes(requestingUser.role);
+
+        if (!isSelf && !hasElevatedPrivileged) {
+            return res.status(403).json({
+                success: false,
+                message: 'Forbidden: You can only update your own profile.'
+            });
+        }
+
         const user = await authService.updateUser(id, req.body);
         res.json({
             success: true,

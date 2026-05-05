@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, User, LogOut, Settings, ShieldCheck } from 'lucide-react';
@@ -40,6 +41,7 @@ export const RoleSwitcher = () => {
 
 export const ProfileDropdown = () => {
     const { user, logout } = useAuthStore();
+    const navigate = useNavigate();
 
     const roleColors = {
         admin: 'from-gray-900 to-black',
@@ -72,12 +74,18 @@ export const ProfileDropdown = () => {
                         <p className="text-sm font-black text-slate-900">{user?.email}</p>
                     </div>
 
-                    <DropdownMenu.Item className="flex items-center gap-3 px-3 py-2.5 text-[12px] font-bold text-slate-600 rounded-xl cursor-pointer outline-none hover:bg-slate-50 hover:text-indigo-600 transition-all group">
+                    <DropdownMenu.Item
+                        onClick={() => navigate('/settings')}
+                        className="flex items-center gap-3 px-3 py-2.5 text-[12px] font-bold text-slate-600 rounded-xl cursor-pointer outline-none hover:bg-slate-50 hover:text-indigo-600 transition-all group"
+                    >
                         <User size={16} className="opacity-50 group-hover:opacity-100" />
                         Profile Settings
                     </DropdownMenu.Item>
 
-                    <DropdownMenu.Item className="flex items-center gap-3 px-3 py-2.5 text-[12px] font-bold text-slate-600 rounded-xl cursor-pointer outline-none hover:bg-slate-50 hover:text-indigo-600 transition-all group">
+                    <DropdownMenu.Item
+                        onClick={() => navigate('/settings')}
+                        className="flex items-center gap-3 px-3 py-2.5 text-[12px] font-bold text-slate-600 rounded-xl cursor-pointer outline-none hover:bg-slate-50 hover:text-indigo-600 transition-all group"
+                    >
                         <Settings size={16} className="opacity-50 group-hover:opacity-100" />
                         Security Preference
                     </DropdownMenu.Item>

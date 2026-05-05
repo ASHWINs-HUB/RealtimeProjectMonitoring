@@ -8,6 +8,7 @@ import { HRDashboard } from '@/pages/HRDashboard';
 import { ManagerDashboard } from '@/pages/ManagerDashboard';
 import { TeamLeaderDashboard } from '@/pages/TeamLeaderDashboard';
 import { DeveloperDashboard } from '@/pages/DeveloperDashboard';
+import DeveloperTasks from '@/pages/DeveloperTasksV2';
 import { ProjectsPage } from '@/pages/ProjectsPage';
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage';
 import { AnalyticsPage } from '@/pages/AnalyticsPage';
@@ -15,6 +16,7 @@ import { InsightsPage } from '@/pages/InsightsPage';
 import { MyScorePage } from '@/pages/MyScorePage';
 import { TeamManagementPage } from '@/pages/TeamManagementPage';
 import { SmartDashboard } from '@/pages/SmartDashboard';
+import { SettingsPage } from '@/pages/SettingsPage';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Page transition wrapper
@@ -80,8 +82,9 @@ const App = () => {
 
           <Route path="/team" element={<ProtectedRoute allowedRoles={['hr', 'manager']}><PageTransition><TeamManagementPage /></PageTransition></ProtectedRoute>} />
 
-          <Route path="/tasks" element={<ProtectedRoute allowedRoles={['developer', 'team_leader']}><PageTransition><DeveloperDashboard /></PageTransition></ProtectedRoute>} />
+          <Route path="/tasks" element={<ProtectedRoute allowedRoles={['developer', 'team_leader']}><PageTransition><DeveloperTasks /></PageTransition></ProtectedRoute>} />
           <Route path="/my-score" element={<ProtectedRoute allowedRoles={['developer', 'team_leader', 'admin']}><PageTransition><MyScorePage /></PageTransition></ProtectedRoute>} />
+          <Route path="/settings" element={<PageTransition><SettingsPage /></PageTransition>} />
 
           {/* Fallback to Dashboard */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -29,20 +29,29 @@ export const seedDatabase = async () => {
       { name: 'Sarah HR', email: 'hr@projectpulse.io', password, role: 'hr', department: 'Human Resources' },
       { name: 'Alex Manager', email: 'manager@projectpulse.io', password, role: 'manager', department: 'Engineering' },
       { name: 'Taylor Lead', email: 'lead@projectpulse.io', password, role: 'team_leader', department: 'Engineering' },
-      { name: 'Casey Dev', email: 'dev@projectpulse.io', password, role: 'developer', department: 'Engineering' }
+      {
+        name: 'Casey Dev', email: 'dev@projectpulse.io', password, role: 'developer', department: 'Engineering',
+        education: 'MIT', degree: 'Computer Science', experience_years: 5, salary: 85000.00,
+        skills_summary: 'React, Node.js, PostgreSQL, AWS, Python'
+      }
     ];
 
     const users = [];
     for (const u of usersData) {
       const res = await client.query(
-        `INSERT INTO users (name, email, password, role, department) 
-         VALUES ($1, $2, $3, $4, $5) 
+        `INSERT INTO users (name, email, password, role, department, education, degree, experience_years, salary, skills_summary) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
          ON CONFLICT (email) DO UPDATE SET 
            name = EXCLUDED.name,
            role = EXCLUDED.role,
-           department = EXCLUDED.department
+           department = EXCLUDED.department,
+           education = EXCLUDED.education,
+           degree = EXCLUDED.degree,
+           experience_years = EXCLUDED.experience_years,
+           salary = EXCLUDED.salary,
+           skills_summary = EXCLUDED.skills_summary
          RETURNING *`,
-        [u.name, u.email, u.password, u.role, u.department]
+        [u.name, u.email, u.password, u.role, u.department, u.education || null, u.degree || null, u.experience_years || 0, u.salary || 0, u.skills_summary || null]
       );
       users.push(res.rows[0]);
     }
@@ -121,12 +130,27 @@ export const seedDatabase = async () => {
        ON CONFLICT DO NOTHING`,
       [hr.id]
     );
-    await client.query(
-      `INSERT INTO notifications (user_id, title, message, type)
-       VALUES ($1, 'New Project Assignment', 'You have 4 projects waiting for oversight.', 'info')
-       ON CONFLICT DO NOTHING`,
-      [manager.id]
-    );
+
+    // 7. Award Initial Achievements to Developer
+    const achievements = await client.query('SELECT id, code FROM achievements');
+    const firstCommit = achievements.rows.find(a => a.code === 'FIRST_COMMIT');
+    const reliableDev = achievements.rows.find(a => a.code === 'RELIABLE_DEV');
+    const earlyBird = achievements.rows.find(a => a.code === 'EARLY_BIRD');
+
+    if (firstCommit) await client.query(`INSERT INTO user_achievements (user_id, achievement_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [dev.id, firstCommit.id]);
+    if (reliableDev) await client.query(`INSERT INTO user_achievements (user_id, achievement_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [dev.id, reliableDev.id]);
+    if (earlyBird) await client.query(`INSERT INTO user_achievements (user_id, achievement_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [dev.id, earlyBird.id]);
+
+    // 8. Add Skills
+    const skills = ['React', 'Node.js', 'PostgreSQL', 'Python'];
+    for (const skill of skills) {
+      await client.query(
+        `INSERT INTO user_skills (user_id, skill_name, proficiency_level, total_xp)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (user_id, skill_name) DO NOTHING`,
+        [dev.id, skill, 7, 1000]
+      );
+    }
 
     await client.query('COMMIT');
 

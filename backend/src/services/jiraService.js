@@ -4,19 +4,24 @@ import logger from '../utils/logger.js';
 
 class JiraService {
     constructor() {
-        this.baseUrl = config.jira.baseUrl;
+        this.baseUrl = (config.jira.baseUrl || '').replace(/\/$/, ''); // Remove trailing slash
+        if (this.baseUrl) {
+            logger.info(`Jira Service configured with URL: ${this.baseUrl}`);
+        } else {
+            logger.warn('Jira Service configuration missing JIRA_BASE_URL');
+        }
     }
 
     async request(method, endpoint, data = null) {
         const email = (process.env.JIRA_EMAIL || config.jira.email || '').trim();
         const token = (process.env.JIRA_API_TOKEN || config.jira.apiToken || '').trim();
-        
+
         // Skip if Jira is not configured
         if (!email || !token || !this.baseUrl) {
             logger.warn('Jira service not properly configured - skipping request');
             return null;
         }
-        
+
         const authString = Buffer.from(`${email}:${token}`).toString('base64');
 
         const headers = {

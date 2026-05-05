@@ -2,6 +2,7 @@ import axios from 'axios';
 import config from '../config/index.js';
 import pool from '../config/database.js';
 import logger from '../utils/logger.js';
+import { gamificationService } from './gamificationService.js';
 
 class GitHubService {
   constructor() {
@@ -212,6 +213,17 @@ class GitHubService {
               commit.commit?.author?.date
             ]
           );
+
+          // Award FIRST_COMMIT if applicable
+          const userLookup = await pool.query('SELECT id FROM users WHERE email = $1', [commit.commit?.author?.email]);
+          if (userLookup.rows.length > 0) {
+            const userId = userLookup.rows[0].id;
+            const commitCount = await pool.query('SELECT COUNT(*) FROM github_commits WHERE author_email = $1', [commit.commit?.author?.email]);
+            if (parseInt(commitCount.rows[0].count) <= 1) {
+              await gamificationService.awardAchievement(userId, 'FIRST_COMMIT');
+            }
+          }
+
           synced++;
         } catch (e) {
           // Skip duplicate commits
@@ -236,12 +248,17 @@ class GitHubService {
 
   async getRepositoryAnalytics(owner, repo) {
     try {
-      const [commits, contributors, languages, pullRequests] = await Promise.all([
-        this.getCommits(owner, repo, { per_page: 100 }).catch(() => []),
-        this.getContributors(owner, repo).catch(() => []),
-        this.getLanguages(owner, repo).catch(() => ({})),
-        this.getPullRequests(owner, repo).catch(() => [])
+      const [commitsRaw, contributorsRaw, languagesRaw, pullRequestsRaw] = await Promise.all([
+        this.getCommits(owner, repo, { per_page: 100 }).catch(e => { logger.warn(`Commits fetch failed: ${e.message}`); return []; }),
+        this.getContributors(owner, repo).catch(e => { logger.warn(`Contributors fetch failed: ${e.message}`); return []; }),
+        this.getLanguages(owner, repo).catch(e => { logger.warn(`Languages fetch failed: ${e.message}`); return {}; }),
+        this.getPullRequests(owner, repo).catch(e => { logger.warn(`PRs fetch failed: ${e.message}`); return []; })
       ]);
+
+      const commits = Array.isArray(commitsRaw) ? commitsRaw : [];
+      const contributors = Array.isArray(contributorsRaw) ? contributorsRaw : [];
+      const languages = languagesRaw || {};
+      const pullRequests = Array.isArray(pullRequestsRaw) ? pullRequestsRaw : [];
 
       // Compute daily commit frequency for last 30 days
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);

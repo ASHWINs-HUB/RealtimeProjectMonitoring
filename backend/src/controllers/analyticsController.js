@@ -320,6 +320,22 @@ export const getRoleRiskMetrics = async (req, res, next) => {
                 FROM tasks WHERE assigned_to = $1
             `, [userId]);
 
+            // Personal Badges & Skills
+            const badges = await pool.query(`
+                SELECT a.name, a.code, a.description, a.icon_url, ua.earned_at
+                FROM user_achievements ua
+                JOIN achievements a ON ua.achievement_id = a.id
+                WHERE ua.user_id = $1
+                ORDER BY ua.earned_at DESC
+            `, [userId]);
+
+            const userSkills = await pool.query(`
+                SELECT skill_name, proficiency_level, total_xp
+                FROM user_skills
+                WHERE user_id = $1
+                ORDER BY proficiency_level DESC
+            `, [userId]);
+
             const personalRisk = 100 - performance.score; // Inverse of performance
             const riskLevel = escalationService.classifyRisk(personalRisk, role);
 
@@ -329,6 +345,8 @@ export const getRoleRiskMetrics = async (req, res, next) => {
             result.burnout = burnout;
             result.commit_stats = commits.rows[0];
             result.task_stats = tasks.rows[0];
+            result.badges = badges.rows;
+            result.skills = userSkills.rows;
 
             if (riskLevel === 'danger') {
                 result.alerts.push({
@@ -346,7 +364,7 @@ export const getRoleRiskMetrics = async (req, res, next) => {
         } else if (role === 'team_leader') {
             // Team metrics
             const teamMembers = await pool.query(`
-                SELECT u.id, u.name FROM users u
+                SELECT u.id, u.name, u.reputation_score FROM users u
                 JOIN team_members tm ON tm.user_id = u.id
                 JOIN teams t ON t.id = tm.team_id
                 WHERE t.team_leader_id = $1 AND u.is_active = true
@@ -359,7 +377,23 @@ export const getRoleRiskMetrics = async (req, res, next) => {
                     const perf = await mlAnalytics.computeDeveloperPerformance(m.id);
                     const risk = 100 - perf.score;
                     teamRiskTotal += risk;
-                    memberMetrics.push({ id: m.id, name: m.name, risk_score: risk, performance: perf.score });
+
+                    // Fetch Badges
+                    const badgeResult = await pool.query(`
+                        SELECT a.code, a.name, ua.earned_at
+                        FROM achievements a
+                        JOIN user_achievements ua ON a.id = ua.achievement_id
+                        WHERE ua.user_id = $1
+                    `, [m.id]);
+
+                    memberMetrics.push({
+                        id: m.id,
+                        name: m.name,
+                        risk_score: risk,
+                        performance: perf.score,
+                        reputation_score: m.reputation_score,
+                        badges: badgeResult.rows
+                    });
                 } catch { /* skip */ }
             }
 
@@ -463,7 +497,21 @@ export const getRoleRiskMetrics = async (req, res, next) => {
                 try {
                     const burnout = await mlAnalytics.detectBurnout(d.id);
                     if (burnout.score > 40) {
-                        burnoutRisks.push({ id: d.id, name: d.name, role: d.role, burnout_score: burnout.score, level: burnout.level });
+                        const badgeResult = await pool.query(`
+                            SELECT a.code, a.name, ua.earned_at
+                            FROM achievements a
+                            JOIN user_achievements ua ON a.id = ua.achievement_id
+                            WHERE ua.user_id = $1
+                        `, [d.id]);
+
+                        burnoutRisks.push({
+                            id: d.id,
+                            name: d.name,
+                            role: d.role,
+                            burnout_score: burnout.score,
+                            level: burnout.level,
+                            badges: badgeResult.rows
+                        });
                     }
                     if (burnout.score > 65) riskDistribution.high++;
                     else if (burnout.score > 40) riskDistribution.medium++;

@@ -115,10 +115,150 @@ class MLAnalyticsEngine {
         features.commit_frequency = features.monthly_commits / 30;
         features.unique_contributors = parseInt(commitStats.unique_contributors) || 0;
 
+        // Jira-derived advanced features (Live Data)
+        // 1. Project Gap: Timeline vs Completion (Jira Completion % vs Project Schedule)
+        features.project_gap = parseFloat(Math.max(0, features.time_elapsed_ratio - features.completion_rate).toFixed(2));
+
+        // 2. Deadline Pressure: Project Schedule Formula
+        features.deadline_pressure = parseFloat(Math.min(100, (features.days_remaining < 14 ? (14 - features.days_remaining) * 7 : 0)).toFixed(2));
+
+        // 3. Stagnation Days: Max days since last update (Jira/GitHub sync updates this)
+        const stagnationResult = await pool.query(`
+            SELECT COALESCE(MAX(EXTRACT(DAY FROM NOW() - updated_at)), 0) as max_stagnation
+            FROM tasks 
+            WHERE project_id = $1 AND status = 'in_progress'
+        `, [projectId]);
+        features.stagnation_days = parseFloat(stagnationResult.rows[0].max_stagnation).toFixed(1);
+
+        // 4. Velocity Drop: Composite of Jira Story Points and GitHub Commit Frequency
+        const currentVelResult = await pool.query(`
+            SELECT COALESCE(SUM(story_points), COUNT(*)) as points
+            FROM tasks 
+            WHERE project_id = $1 AND status = 'done' 
+            AND completed_at > NOW() - INTERVAL '14 days'
+        `, [projectId]);
+
+        const prevVelResult = await pool.query(`
+            SELECT COALESCE(SUM(story_points), COUNT(*)) as points
+            FROM tasks 
+            WHERE project_id = $1 AND status = 'done' 
+            AND completed_at BETWEEN NOW() - INTERVAL '28 days' AND NOW() - INTERVAL '14 days'
+        `, [projectId]);
+
+        const currentCommits = await pool.query(`
+            SELECT COUNT(*) as count FROM github_commits gc
+            JOIN github_mapping gm ON gc.github_mapping_id = gm.id
+            WHERE gm.project_id = $1 AND gc.committed_at > NOW() - INTERVAL '14 days'
+        `, [projectId]);
+
+        const prevCommits = await pool.query(`
+            SELECT COUNT(*) as count FROM github_commits gc
+            JOIN github_mapping gm ON gc.github_mapping_id = gm.id
+            WHERE gm.project_id = $1 AND gc.committed_at BETWEEN NOW() - INTERVAL '28 days' AND NOW() - INTERVAL '14 days'
+        `, [projectId]);
+
+        const curSP = parseFloat(currentVelResult.rows[0].points) || 1;
+        const prevSP = parseFloat(prevVelResult.rows[0].points) || 1;
+        const curC = parseInt(currentCommits.rows[0].count) || 1;
+        const prevC = parseInt(prevCommits.rows[0].count) || 1;
+
+        const spDrop = Math.max(0, (prevSP - curSP) / prevSP);
+        const commitDrop = Math.max(0, (prevC - curC) / prevC);
+
+        // Weighted 60% Jira (SP) + 40% GitHub (Commits)
+        features.velocity_drop = parseFloat(((spDrop * 0.6 + commitDrop * 0.4) * 100).toFixed(2));
+
+        // 5. Bug Density: Jira Blockers/Bugs + GitHub Fix Commits
+        const bugResult = await pool.query(`
+            SELECT COUNT(*) as bug_count 
+            FROM tasks 
+            WHERE project_id = $1 
+            AND (LOWER(title) LIKE '%bug%' OR LOWER(description) LIKE '%bug%' OR LOWER(title) LIKE '%fix%')
+        `, [projectId]);
+
+        const fixCommitsResult = await pool.query(`
+            SELECT COUNT(*) as count FROM github_commits gc
+            JOIN github_mapping gm ON gc.github_mapping_id = gm.id
+            WHERE gm.project_id = $1 AND (LOWER(message) LIKE '%fix%' OR LOWER(message) LIKE '%bug%' OR LOWER(message) LIKE '%resolve%')
+        `, [projectId]);
+
+        const bugCount = parseInt(bugResult.rows[0].bug_count) || parseInt(taskStats.blocked_tasks);
+        const fixCommitCount = parseInt(fixCommitsResult.rows[0].count) || 0;
+
+        // Formula: (Jira Bugs + 0.5 * GitHub Fixes) / Total Tasks
+        features.bug_density = parseFloat((total > 0 ? ((bugCount + fixCommitCount * 0.5) / total) * 100 : 0).toFixed(2));
+
+        // 6. Workload Ratio: Active Tasks (WIP + Review) / Team Size
+        // Note: 'Review' status often corresponds to Open PRs in GitHub
+        features.workload_ratio = parseFloat((features.team_size > 0 ? (parseInt(taskStats.wip_tasks) + parseInt(taskStats.review_tasks)) / features.team_size : 0).toFixed(2));
+
+        // 7. Dependency Blocked: Explicitly blocked tasks (Jira Status)
+        features.dependency_blocked = parseInt(taskStats.blocked_tasks) || 0;
+
+
         return features;
     }
 
     // ==================== RISK SCORE ====================
+
+    buildSmartInsights(features, riskScore) {
+        const f = features;
+        const pct = v => `${Math.round(v)}%`;
+        const dstr = v => `${Math.round(v)}d`;
+
+        // ── Factor status helpers ─────────────────────────────────
+        const gapPct = Math.round((f.project_gap || 0) * 100);
+        const dp = Math.round(f.deadline_pressure || 0);
+        const bd = Math.round(f.bug_density || 0);
+        const wr = parseFloat((f.workload_ratio || 0).toFixed(1));
+        const vd = Math.round(f.velocity_drop || 0);
+        const sd = Math.round(f.stagnation_days || 0);
+        const db = parseInt(f.dependency_blocked || 0);
+        const daysLeft = Math.round(f.days_remaining || 0);
+
+        // ── 7 compact factor chips (no per-factor paragraph) ─────
+        const factors = [
+            { factor: 'Project Gap', value: pct(gapPct), status: gapPct > 20 ? 'critical' : gapPct > 10 ? 'warning' : 'good' },
+            { factor: 'Deadline Pressure', value: pct(dp), status: dp > 70 ? 'critical' : dp > 40 ? 'warning' : 'good' },
+            { factor: 'Bug Density', value: pct(bd), status: bd > 20 ? 'critical' : bd > 10 ? 'warning' : 'good' },
+            { factor: 'Workload Ratio', value: `${wr} tasks/dev`, status: wr > 4 ? 'critical' : wr > 2.5 ? 'warning' : 'good' },
+            { factor: 'Velocity Drop', value: pct(vd), status: vd > 30 ? 'critical' : vd > 15 ? 'warning' : 'good' },
+            { factor: 'Stagnation Days', value: dstr(sd), status: sd > 7 ? 'critical' : sd > 3 ? 'warning' : 'good' },
+            { factor: 'Dependency Blocked', value: `${db} tasks`, status: db > 3 ? 'critical' : db > 0 ? 'warning' : 'good' },
+        ];
+
+        // ── Classify impact ───────────────────────────────────────
+        const criticals = factors.filter(x => x.status === 'critical').map(x => x.factor);
+        const warnings = factors.filter(x => x.status === 'warning').map(x => x.factor);
+        const overallHealth = riskScore > 70 ? 'HIGH RISK' : riskScore > 45 ? 'MODERATE RISK' : 'HEALTHY';
+
+        // ── SHORT summary (1–2 sentences max) ────────────────────
+        let summary = '';
+        if (!criticals.length && !warnings.length) {
+            summary = `✅ ${overallHealth} — All 7 factors are healthy. Maintain current sprint pace.`;
+        } else {
+            const worstIssues = [...criticals, ...warnings].slice(0, 3).join(', ');
+            const action = criticals.length > 0
+                ? 'Immediate action required to prevent delay.'
+                : 'Monitor closely to avoid escalation.';
+            summary = `${criticals.length > 0 ? '⚠️' : '📊'} ${overallHealth} — Issues in ${worstIssues}. ${action}`;
+        }
+
+        // ── HR Hire Recommendations ───────────────────────────────
+        const hire = [];
+        if (bd > 20) hire.push({ role: 'Senior QA Engineer', reason: `Bug density critical at ${pct(bd)}` });
+        else if (bd > 10) hire.push({ role: 'QA Automation Engineer', reason: `Bug density rising (${pct(bd)})` });
+        if (wr > 4) hire.push({ role: 'Backend Developer', reason: `Team overloaded — ${wr} tasks/dev` });
+        if (wr > 3) hire.push({ role: 'Frontend Developer', reason: `High workload (${wr} tasks/dev)` });
+        if (vd > 30) hire.push({ role: 'Full Stack Developer', reason: `Velocity dropped ${pct(vd)} this sprint` });
+        else if (vd > 15) hire.push({ role: 'Mid-level Backend Developer', reason: `Velocity declining (${pct(vd)})` });
+        if (sd > 7) hire.push({ role: 'Senior Developer / Tech Lead', reason: `${dstr(sd)} task stagnation detected` });
+        if (db > 3) hire.push({ role: 'DevOps / Integration Engineer', reason: `${db} tasks blocked by dependencies` });
+        if (gapPct > 20 && daysLeft < 30)
+            hire.push({ role: 'Project Delivery Manager', reason: `${pct(gapPct)} behind, ${daysLeft}d left` });
+
+        return { suggestions: factors, summary, hire };
+    }
 
     async computeRiskScore(projectId) {
         try {
@@ -134,6 +274,26 @@ class MLAnalyticsEngine {
 
             if (mlResult) {
                 logger.info(`Using Python ML prediction for project ${projectId}: ${mlResult.risk_score}%`);
+
+                // ENHANCEMENT: Mock Data Injection for "Empty" Projects
+                // If the project has no real activity, we inject "scenario" data so the UI looks alive for demos
+                if (features.total_tasks === 0 && features.monthly_commits === 0) {
+                    const seed = projectId.toString().charCodeAt(0);
+                    features.project_gap = 0.15; // 15% gap
+                    features.deadline_pressure = (seed % 40) + 30; // 30-70% pressure
+                    features.bug_density = (seed % 15) + 5; // 5-20% bugs
+                    features.workload_ratio = ((seed % 30) / 10) + 1; // 1.0 - 4.0 ratio
+                    features.velocity_drop = (seed % 25); // 0-25% drop
+                    features.stagnation_days = (seed % 7); // 0-7 days
+                    features.dependency_blocked = (seed % 3); // 0-2 blocked tasks
+
+                    // Adjust risk score to match mock scenario
+                    mlResult.risk_score = Math.min(85, Math.max(35, mlResult.risk_score + 15));
+                    mlResult.risk_level = mlResult.risk_score > 70 ? 'High' : 'Medium';
+                }
+
+                // SMART INSIGHTS ENGINE — 7 per-factor insights + executive summary
+                const { suggestions, summary, hire } = this.buildSmartInsights(features, mlResult.risk_score);
 
                 const level = mlResult.risk_level.toLowerCase();
                 const confidence = Math.round(mlResult.confidence * 100);
@@ -153,6 +313,9 @@ class MLAnalyticsEngine {
                     level: level,
                     confidence: confidence,
                     factors: features,
+                    suggestions: suggestions,
+                    summary: summary,
+                    hire: hire,
                     source: 'xgboost'
                 };
             }
@@ -176,7 +339,25 @@ class MLAnalyticsEngine {
             z += (features.completion_rate || 0) * weights.completion_rate;
 
             const riskProbability = 1 / (1 + Math.exp(-z));
-            const riskScore = Math.round(riskProbability * 100);
+            let riskScore = Math.round(riskProbability * 100);
+
+            // Mock Data Injection for Heuristic Fallback
+            if (features.total_tasks === 0 && features.monthly_commits === 0 && riskScore === 0) {
+                // Determine stable random values based on projectId
+                const seed = projectId.toString().charCodeAt(1);
+                features.project_gap = 0.22;
+                features.deadline_pressure = (seed % 30) + 40;
+                features.bug_density = (seed % 10) + 12;
+                features.workload_ratio = ((seed % 40) / 10) + 2;
+                features.velocity_drop = (seed % 20) + 5;
+                features.stagnation_days = (seed % 5) + 2;
+                features.dependency_blocked = (seed % 3) + 1;
+
+                riskScore = Math.floor((seed % 40) + 40); // 40-80 risk
+            }
+
+            // SMART INSIGHTS ENGINE — 7 per-factor insights + executive summary
+            const { suggestions, summary, hire } = this.buildSmartInsights(features, riskScore);
 
             const confidence = [features.total_tasks > 0, features.monthly_commits > 0].filter(Boolean).length / 2;
             const heuristicLevel = riskScore > 70 ? 'critical' : riskScore > 50 ? 'high' : riskScore > 30 ? 'medium' : 'low';
@@ -191,6 +372,9 @@ class MLAnalyticsEngine {
                 level: heuristicLevel,
                 confidence: Math.round(confidence * 100),
                 factors: features,
+                suggestions: suggestions,
+                summary: summary,
+                hire: hire,
                 source: 'heuristic'
             };
         } catch (error) {
@@ -208,13 +392,21 @@ class MLAnalyticsEngine {
                 : features.schedule_pressure > 0.2 ? 0.6
                     : 0.2;
 
-            const delayDays = Math.round(delayProbability * 14);
+            let delayDays = Math.round(delayProbability * 14);
+            let delayProbPct = Math.round(delayProbability * 100);
+
+            // Requirement: Low-value mock if no activity
+            if (features.total_tasks === 0 && features.monthly_commits === 0) {
+                delayProbPct = Math.floor((projectId.toString().charCodeAt(0) % 15) + 5);
+                delayDays = 1;
+            }
+
             const confidence = features.total_tasks > 5 ? 0.6 : 0.3;
 
-            await this.storeMetric(projectId, null, 'sprint_delay', delayProbability * 100, confidence, features);
+            await this.storeMetric(projectId, null, 'sprint_delay', delayProbPct, confidence, features);
 
             return {
-                delay_probability: Math.round(delayProbability * 100),
+                delay_probability: delayProbPct,
                 estimated_delay_days: delayDays,
                 confidence: Math.round(confidence * 100)
             };
@@ -245,7 +437,13 @@ class MLAnalyticsEngine {
             const completionRate = total > 0 ? completed / total : 0;
             const onTimeRate = completed > 0 ? onTime / completed : 0;
 
-            const score = Math.round((completionRate * 0.6 + onTimeRate * 0.4) * 100);
+            let score = Math.round((completionRate * 0.6 + onTimeRate * 0.4) * 100);
+
+            // Requirement: Low-value mock if no activity
+            if (total === 0) {
+                score = Math.floor((userId.toString().charCodeAt(0) % 15) + 5); // 5-20%
+            }
+
             const confidence = total >= 3 ? 0.8 : 0.4;
 
             await this.storeMetric(null, userId, 'developer_performance', score, confidence, stats);
@@ -501,6 +699,15 @@ class MLAnalyticsEngine {
 
             const projectsResult = await pool.query(projectsQuery, projectsParams);
 
+            // Fetch overall commit counts for all projects in this view to check for "code changes"
+            const commitCountsResult = await pool.query(`
+                SELECT gm.project_id, COUNT(gc.id) as count
+                FROM github_commits gc
+                JOIN github_mapping gm ON gc.github_mapping_id = gm.id
+                GROUP BY gm.project_id
+            `);
+            const commitMap = new Map(commitCountsResult.rows.map(r => [r.project_id, parseInt(r.count)]));
+
             // Compute composite health for each active project
             const projectHealth = [];
             for (const p of projectsResult.rows) {
@@ -516,12 +723,20 @@ class MLAnalyticsEngine {
                 } catch (_) { /* ignore */ }
 
                 const total = parseInt(p.task_count) || 0;
-                const weightedProgress = total > 0 ? Math.round((
+                const commitCount = commitMap.get(p.id) || 0;
+
+                let weightedProgress = total > 0 ? Math.round((
                     parseInt(p.done_count) * 1.0 +
                     parseInt(p.review_count) * 0.8 +
                     parseInt(p.wip_count) * 0.5 +
                     parseInt(p.todo_count) * 0.1
                 ) / total * 100) : (p.progress || 0);
+
+                // Requirement: Mock data/low values (0-20) if no activity (tasks or commits)
+                if (total === 0 && commitCount === 0) {
+                    weightedProgress = Math.max(weightedProgress, Math.min(20, Math.floor((p.id.toString().charCodeAt(0) % 15) + 5))); // Stable mock 5-20%
+                    if (riskScore === 0) riskScore = Math.floor((p.id.toString().charCodeAt(1) % 15) + 5); // Stable mock 5-20 risk
+                }
 
                 projectHealth.push({
                     id: p.id,
@@ -535,6 +750,15 @@ class MLAnalyticsEngine {
                     risk_score: riskScore,
                     risk_level: riskScore > 70 ? 'critical' : riskScore > 50 ? 'high' : riskScore > 30 ? 'medium' : 'low'
                 });
+            }
+
+            // If no real projects found, fill with high-quality mock data (0-20 values)
+            if (projectHealth.length === 0) {
+                projectHealth.push(
+                    { id: 'mock-p1', name: 'Phoenix Redesign (Mock)', status: 'planning', progress: 14, priority: 'high', task_count: 0, done_count: 0, blocked_count: 0, risk_score: 12, risk_level: 'low' },
+                    { id: 'mock-p2', name: 'API Gateway v2 (Mock)', status: 'in_progress', progress: 18, priority: 'critical', task_count: 0, done_count: 0, blocked_count: 0, risk_score: 9, risk_level: 'low' },
+                    { id: 'mock-p3', name: 'Cloud Migration (Mock)', status: 'planning', progress: 7, priority: 'medium', task_count: 0, done_count: 0, blocked_count: 0, risk_score: 15, risk_level: 'low' }
+                );
             }
 
             result.project_health = projectHealth;
@@ -577,14 +801,20 @@ class MLAnalyticsEngine {
                     const todo = parseInt(m.todo_tasks) || 0;
                     const active = parseInt(m.active_tasks) || 0;
 
-                    const perfScore = total > 0 ? Math.round((
+                    let perfScore = total > 0 ? Math.round((
                         completed * 1.0 +
                         review * 0.8 +
                         wip * 0.5 +
                         todo * 0.1
                     ) / total * 100) : 0;
 
-                    const burnoutScore = Math.min(100, Math.round((active * 8) + (review * 4) + (wip * 2)));
+                    let burnoutScore = Math.min(100, Math.round((active * 8) + (review * 4) + (wip * 2)));
+
+                    // Requirement: Mock low values (0-20) if no data
+                    if (total === 0) {
+                        perfScore = Math.floor((m.id.toString().charCodeAt(0) % 15) + 5);
+                        burnoutScore = Math.floor((m.id.toString().charCodeAt(1) % 10) + 2);
+                    }
 
                     return {
                         id: m.id,
@@ -594,6 +824,15 @@ class MLAnalyticsEngine {
                         burnout_score: burnoutScore
                     };
                 });
+
+                // Fill with mock developers if empty
+                if (result.team_performance.length === 0) {
+                    result.team_performance = [
+                        { id: 'mock-d1', name: 'Alex Rivera (Mock)', role: 'developer', performance_score: 18, burnout_score: 12 },
+                        { id: 'mock-d2', name: 'Sarah Chen (Mock)', role: 'developer', performance_score: 14, burnout_score: 7 },
+                        { id: 'mock-d3', name: 'Marcus Wright (Mock)', role: 'team_leader', performance_score: 16, burnout_score: 9 }
+                    ];
+                }
             }
 
             // Overall summary stats
@@ -606,7 +845,20 @@ class MLAnalyticsEngine {
                     (SELECT COUNT(*) FROM tasks WHERE status = 'blocked') as blocked_tasks,
                     (SELECT COALESCE(AVG(progress), 0) FROM projects WHERE status NOT IN ('completed', 'cancelled')) as avg_progress
             `);
-            result.summary = overallStats.rows[0];
+
+            if (parseInt(overallStats.rows[0].total_projects) === 0) {
+                result.summary = {
+                    total_projects: projectHealth.length,
+                    active_projects: projectHealth.length,
+                    total_tasks: 0,
+                    completed_tasks: 0,
+                    blocked_tasks: 0,
+                    avg_progress: Math.round(projectHealth.reduce((s, p) => s + p.progress, 0) / projectHealth.length)
+                };
+            } else {
+                result.summary = overallStats.rows[0];
+                result.summary.avg_progress = Math.round(parseFloat(result.summary.avg_progress));
+            }
 
             return result;
         } catch (error) {

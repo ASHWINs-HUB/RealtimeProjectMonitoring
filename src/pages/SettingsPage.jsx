@@ -2,8 +2,11 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { User, Bell, Moon, Sun, Shield, Database, Globe, Save, Eye, EyeOff } from 'lucide-react'
+import { User, Bell, Moon, Sun, Shield, Database, Globe, Save, Eye, EyeOff, GraduationCap, Briefcase, Code2, Award, Trophy } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
+import api from '@/services/api'
+import { useToast } from '@/components/ui/Toast'
+import { BadgeGrid } from '@/components/profile/BadgeGrid'
 
 export const SettingsPage = () => {
   const { user } = useAuthStore()
@@ -15,9 +18,13 @@ export const SettingsPage = () => {
     name: user?.name || '',
     email: user?.email || '',
     role: user?.role || '',
-    department: 'Engineering',
-    location: 'San Francisco, CA',
-    bio: 'Passionate about building great products and leading amazing teams.'
+    department: user?.department || 'Engineering',
+    education: user?.education || '',
+    degree: user?.degree || '',
+    experience_years: user?.experience_years || 0,
+    skills_summary: user?.skills_summary || '',
+    location: user?.location || 'San Francisco, CA',
+    bio: user?.bio || 'Passionate about building great products and leading amazing teams.'
   })
 
   const tabs = [
@@ -25,19 +32,34 @@ export const SettingsPage = () => {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'appearance', label: 'Appearance', icon: Moon },
     { id: 'security', label: 'Security', icon: Shield },
+    { id: 'achievements', label: 'Achievements', icon: Award },
     { id: 'advanced', label: 'Advanced', icon: Database }
   ]
 
+  const toast = useToast()
+  const { updateUser } = useAuthStore()
+
   const handleInputChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: name === 'experience_years' ? (value === '' ? 0 : parseInt(value)) : value
     })
   }
 
-  const handleSave = () => {
-    // Save logic here
-    console.log('Saving settings:', formData)
+  const handleSave = async () => {
+    try {
+      const response = await api.updateUser(user.id, formData);
+      if (response.success) {
+        updateUser(response.user);
+        toast.success('Profile updated successfully');
+      } else {
+        toast.error(response.message || 'Failed to update profile');
+      }
+    } catch (error) {
+      toast.error(error.message || 'An error occurred while saving.');
+      console.error('Settings Save Error:', error);
+    }
   }
 
   return (
@@ -63,11 +85,10 @@ export const SettingsPage = () => {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
-                        activeTab === tab.id
-                          ? 'bg-indigo-50 text-indigo-600'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
+                      className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${activeTab === tab.id
+                        ? 'bg-indigo-50 text-indigo-600'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        }`}
                     >
                       <Icon size={18} />
                       <span className="text-sm font-medium">{tab.label}</span>
@@ -87,8 +108,14 @@ export const SettingsPage = () => {
               animate={{ opacity: 1, x: 0 }}
             >
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0">
                   <CardTitle>Profile Information</CardTitle>
+                  <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full">
+                    <Trophy size={14} className="text-indigo-600" />
+                    <span className="text-xs font-black text-indigo-800 uppercase tracking-widest">
+                      {user?.reputation_score || 3000} Points
+                    </span>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -139,6 +166,58 @@ export const SettingsPage = () => {
                         <option value="Sales">Sales</option>
                         <option value="HR">Human Resources</option>
                       </select>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-gray-100">
+                    <h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <GraduationCap size={18} />
+                      Career & Education
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">University / Education</label>
+                        <input
+                          type="text"
+                          name="education"
+                          placeholder="e.g. Stanford University"
+                          value={formData.education}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Degree</label>
+                        <input
+                          type="text"
+                          name="degree"
+                          placeholder="e.g. B.S. Software Engineering"
+                          value={formData.degree}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Years of Experience</label>
+                        <input
+                          type="number"
+                          name="experience_years"
+                          value={formData.experience_years}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Skills (Comma-separated)</label>
+                        <input
+                          type="text"
+                          name="skills_summary"
+                          placeholder="React, Node.js, Python, etc."
+                          value={formData.skills_summary}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -265,14 +344,12 @@ export const SettingsPage = () => {
                       </div>
                       <button
                         onClick={() => setDarkMode(!darkMode)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          darkMode ? 'bg-indigo-600' : 'bg-gray-200'
-                        }`}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${darkMode ? 'bg-indigo-600' : 'bg-gray-200'
+                          }`}
                       >
                         <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            darkMode ? 'translate-x-6' : 'translate-x-1'
-                          }`}
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${darkMode ? 'translate-x-6' : 'translate-x-1'
+                            }`}
                         />
                       </button>
                     </label>
@@ -387,6 +464,27 @@ export const SettingsPage = () => {
                       <Save size={20} className="mr-2" />
                       Update Security
                     </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {activeTab === 'achievements' && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+            >
+              <Card>
+                <CardHeader>
+                  <CardTitle>Badges & Milestones</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-8">
+                    <p className="text-sm text-slate-500 mb-6">
+                      Your professional achievements reflecting your performance, reliability, and growth in the system.
+                    </p>
+                    <BadgeGrid badges={user?.badges} />
                   </div>
                 </CardContent>
               </Card>

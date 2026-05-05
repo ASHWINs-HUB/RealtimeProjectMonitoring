@@ -2,6 +2,112 @@ import pool from '../config/database.js';
 import { SecurityDomain } from '../domain/services/SecurityDomain.js';
 import logger from '../utils/logger.js';
 
+// ── Pre-filled developer pool (mock candidates per role) ───────────────────────
+const DEVELOPER_POOL = {
+    'Senior QA Engineer': [
+        { name: 'Ananya Sharma', email: 'ananya.sharma@talent.io', skills: ['Selenium', 'JIRA', 'Python', 'API Testing'], exp: '6 yrs', rate: '₹18L/yr', avatar: 'AS' },
+        { name: 'Rohit Verma', email: 'rohit.verma@talent.io', skills: ['Cypress', 'TestRail', 'Postman', 'CI/CD'], exp: '5 yrs', rate: '₹16L/yr', avatar: 'RV' },
+        { name: 'Priya Nair', email: 'priya.nair@talent.io', skills: ['Playwright', 'k6', 'Jest', 'SDET'], exp: '7 yrs', rate: '₹20L/yr', avatar: 'PN' },
+    ],
+    'QA Automation Engineer': [
+        { name: 'Karan Mehta', email: 'karan.mehta@talent.io', skills: ['Selenium', 'Java', 'TestNG', 'Jenkins'], exp: '3 yrs', rate: '₹11L/yr', avatar: 'KM' },
+        { name: 'Sneha Reddy', email: 'sneha.reddy@talent.io', skills: ['Cypress', 'JavaScript', 'GitHub Actions'], exp: '2.5 yrs', rate: '₹9L/yr', avatar: 'SR' },
+        { name: 'Aditya Patel', email: 'aditya.patel@talent.io', skills: ['Robot Framework', 'Python', 'Allure'], exp: '4 yrs', rate: '₹13L/yr', avatar: 'AP' },
+    ],
+    'Backend Developer': [
+        { name: 'Vikram Singh', email: 'vikram.singh@talent.io', skills: ['Node.js', 'PostgreSQL', 'Redis', 'Docker'], exp: '5 yrs', rate: '₹17L/yr', avatar: 'VS' },
+        { name: 'Deepak Joshi', email: 'deepak.joshi@talent.io', skills: ['Python', 'FastAPI', 'MongoDB', 'AWS'], exp: '4 yrs', rate: '₹15L/yr', avatar: 'DJ' },
+        { name: 'Meena Iyer', email: 'meena.iyer@talent.io', skills: ['Java', 'Spring Boot', 'Kafka', 'Kubernetes'], exp: '6 yrs', rate: '₹19L/yr', avatar: 'MI' },
+    ],
+    'Frontend Developer': [
+        { name: 'Riya Kapoor', email: 'riya.kapoor@talent.io', skills: ['React', 'TypeScript', 'Tailwind', 'Figma'], exp: '3 yrs', rate: '₹12L/yr', avatar: 'RK' },
+        { name: 'Arjun Das', email: 'arjun.das@talent.io', skills: ['Vue.js', 'Nuxt', 'SCSS', 'Vite'], exp: '4 yrs', rate: '₹14L/yr', avatar: 'AD' },
+        { name: 'Pooja Krishnan', email: 'pooja.krishnan@talent.io', skills: ['React', 'Next.js', 'Redux', 'GraphQL'], exp: '5 yrs', rate: '₹16L/yr', avatar: 'PK' },
+    ],
+    'Full Stack Developer': [
+        { name: 'Rahul Gupta', email: 'rahul.gupta@talent.io', skills: ['React', 'Node.js', 'MongoDB', 'Docker'], exp: '5 yrs', rate: '₹18L/yr', avatar: 'RG' },
+        { name: 'Divya Bhat', email: 'divya.bhat@talent.io', skills: ['Next.js', 'Express', 'PostgreSQL', 'AWS'], exp: '4 yrs', rate: '₹16L/yr', avatar: 'DB' },
+        { name: 'Sanjay Kumar', email: 'sanjay.kumar@talent.io', skills: ['Angular', 'NestJS', 'MySQL', 'CI/CD'], exp: '6 yrs', rate: '₹20L/yr', avatar: 'SK' },
+    ],
+    'Mid-level Backend Developer': [
+        { name: 'Nikhil Rao', email: 'nikhil.rao@talent.io', skills: ['Node.js', 'Express', 'MySQL', 'Git'], exp: '2 yrs', rate: '₹8L/yr', avatar: 'NR' },
+        { name: 'Fatima Sheikh', email: 'fatima.sheikh@talent.io', skills: ['Python', 'Django', 'SQLite', 'REST'], exp: '2.5 yrs', rate: '₹9L/yr', avatar: 'FS' },
+        { name: 'Amit Tiwari', email: 'amit.tiwari@talent.io', skills: ['PHP', 'Laravel', 'MySQL', 'Redis'], exp: '3 yrs', rate: '₹10L/yr', avatar: 'AT' },
+    ],
+    'Senior Developer / Tech Lead': [
+        { name: 'Harish Pillai', email: 'harish.pillai@talent.io', skills: ['System Design', 'Go', 'Kubernetes', 'Microservices'], exp: '9 yrs', rate: '₹28L/yr', avatar: 'HP' },
+        { name: 'Sreeja Unni', email: 'sreeja.unni@talent.io', skills: ['Java', 'Spring Cloud', 'AWS', 'Leadership'], exp: '8 yrs', rate: '₹25L/yr', avatar: 'SU' },
+        { name: 'Manoj Naik', email: 'manoj.naik@talent.io', skills: ['Node.js', 'React', 'System Design', 'Mentoring'], exp: '10 yrs', rate: '₹30L/yr', avatar: 'MN' },
+    ],
+    'DevOps / Integration Engineer': [
+        { name: 'Suresh Babu', email: 'suresh.babu@talent.io', skills: ['Kubernetes', 'Terraform', 'Jenkins', 'AWS'], exp: '5 yrs', rate: '₹18L/yr', avatar: 'SB' },
+        { name: 'Kavitha Rao', email: 'kavitha.rao@talent.io', skills: ['Docker', 'GitHub Actions', 'Azure', 'Helm'], exp: '4 yrs', rate: '₹15L/yr', avatar: 'KR' },
+        { name: 'Tanvir Ahmed', email: 'tanvir.ahmed@talent.io', skills: ['Ansible', 'Prometheus', 'GCP', 'Bash'], exp: '6 yrs', rate: '₹20L/yr', avatar: 'TA' },
+    ],
+    'Project Delivery Manager': [
+        { name: 'Lakshmi Prasad', email: 'lakshmi.prasad@talent.io', skills: ['PMP', 'Agile', 'Stakeholder Mgmt', 'JIRA'], exp: '10 yrs', rate: '₹32L/yr', avatar: 'LP' },
+        { name: 'Girish Nanda', email: 'girish.nanda@talent.io', skills: ['Scrum', 'Risk Mgmt', 'MS Project', 'OKRs'], exp: '8 yrs', rate: '₹28L/yr', avatar: 'GN' },
+    ],
+};
+
+// GET /api/team/hire-pool?role=Backend+Developer
+export const getAvailableDeveloperPool = async (req, res) => {
+    const { role } = req.query;
+    const pool_candidates = DEVELOPER_POOL[role] || Object.values(DEVELOPER_POOL).flat().slice(0, 3);
+    res.json({ success: true, candidates: pool_candidates, role: role || 'All Roles' });
+};
+
+// POST /api/team/hire-and-assign
+// Creates a developer user account + assigns a task on the project
+export const hireAndAssignDeveloper = async (req, res, next) => {
+    try {
+        const { name, email, projectId, taskTitle, taskDescription, role: devRole, skills, department } = req.body;
+
+        if (!name || !email || !projectId) {
+            return res.status(400).json({ success: false, message: 'name, email, and projectId are required' });
+        }
+
+        // Check if user already exists
+        const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+        let userId;
+
+        if (existing.rows.length > 0) {
+            userId = existing.rows[0].id;
+            logger.info(`Developer ${email} already exists, using existing account id=${userId}`);
+        } else {
+            // Create the developer account with a default password
+            const defaultPw = `Welcome@${Math.floor(Math.random() * 9000) + 1000}`;
+            const hashed = await SecurityDomain.hashPassword(defaultPw);
+            const userResult = await pool.query(
+                `INSERT INTO users (name, email, password, role, department, is_active)
+                 VALUES ($1, $2, $3, 'developer', $4, true)
+                 RETURNING id, name, email, role`,
+                [name, email, hashed, department || 'Engineering']
+            );
+            userId = userResult.rows[0].id;
+            logger.info(`Hired new developer: ${email} (id=${userId}) for project ${projectId}`);
+        }
+
+        // Create a task for them on this project
+        if (taskTitle) {
+            await pool.query(
+                `INSERT INTO tasks (project_id, title, description, assigned_to, status, priority, story_points, updated_at)
+                 VALUES ($1, $2, $3, $4, 'todo', 'medium', 3, NOW())`,
+                [projectId, taskTitle, taskDescription || `Assigned to ${name} (${devRole || 'Developer'})`, userId]
+            );
+        }
+
+        res.status(201).json({
+            success: true,
+            message: `${name} has been hired and assigned to the project.`,
+            userId,
+        });
+    } catch (error) {
+        logger.error('hireAndAssignDeveloper failed:', error);
+        next(error);
+    }
+};
+
 // GET /api/team/my-team
 // Role-aware: team_leader sees their developers, manager sees their team leaders, hr sees managers
 export const getMyTeam = async (req, res, next) => {

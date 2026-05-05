@@ -6,8 +6,9 @@ import { motion } from 'framer-motion';
 import { RiskAlertBanner, RiskScoreGauge } from '@/components/ui/RiskAlerts';
 import {
   Users, Heart, RefreshCw, Shield, BarChart3,
-  TrendingDown, Activity, AlertTriangle, Eye
+  TrendingDown, Activity, AlertTriangle, Eye, DollarSign, Save, Trophy
 } from 'lucide-react';
+import { BadgeGrid } from '@/components/profile/BadgeGrid';
 
 /**
  * HR Dashboard — Role-specific
@@ -28,10 +29,17 @@ export const HRDashboard = () => {
   const [syncing, setSyncing] = useState(false);
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
 
+  const [allUsers, setAllUsers] = useState([]);
+  const [editingSalary, setEditingSalary] = useState({});
+
   const fetchData = useCallback(async () => {
     try {
-      const riskData = await api.getRoleRiskMetrics().catch(() => null);
+      const [riskData, usersData] = await Promise.all([
+        api.getRoleRiskMetrics().catch(() => null),
+        api.getUsers().catch(() => ({ users: [] }))
+      ]);
       setMetrics(riskData?.metrics || {});
+      setAllUsers(usersData.users || []);
     } catch {
       toast.error('Failed to load dashboard data');
     } finally {
@@ -40,6 +48,24 @@ export const HRDashboard = () => {
   }, [toast]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleSalaryUpdate = async (userId) => {
+    try {
+      const salary = editingSalary[userId];
+      if (salary === undefined) return;
+
+      await api.updateUser(userId, { salary: parseFloat(salary) });
+      toast.success('Salary updated successfully');
+      setEditingSalary(prev => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to update salary');
+    }
+  };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -101,8 +127,8 @@ export const HRDashboard = () => {
         <motion.div {...fadeIn} className="bg-gradient-to-br from-gray-900 to-purple-950 p-6 rounded-[2rem] text-white shadow-2xl flex flex-col items-center justify-center">
           <RiskScoreGauge score={hrRisk} label="Workforce Risk" size="lg" thresholds={thresholds} />
           <span className={`mt-3 text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${metrics?.risk_level === 'danger' ? 'bg-red-500/20 text-red-300' :
-              metrics?.risk_level === 'warning' ? 'bg-amber-500/20 text-amber-300' :
-                'bg-emerald-500/20 text-emerald-300'
+            metrics?.risk_level === 'warning' ? 'bg-amber-500/20 text-amber-300' :
+              'bg-emerald-500/20 text-emerald-300'
             }`}>
             {metrics?.risk_level === 'danger' ? 'Critical Burnout' : metrics?.risk_level === 'warning' ? 'Elevated Risk' : 'Healthy'}
           </span>
@@ -190,6 +216,7 @@ export const HRDashboard = () => {
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Role</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Burnout Score</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Level</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Milestones</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Recommended Action</th>
               </tr>
             </thead>
@@ -213,7 +240,7 @@ export const HRDashboard = () => {
                     <div className="flex items-center gap-2">
                       <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${emp.burnout_score >= 70 ? 'bg-red-500' :
-                            emp.burnout_score >= 50 ? 'bg-amber-500' : 'bg-orange-400'
+                          emp.burnout_score >= 50 ? 'bg-amber-500' : 'bg-orange-400'
                           }`} style={{ width: `${emp.burnout_score}%` }} />
                       </div>
                       <span className="text-xs font-black text-gray-700">{emp.burnout_score}%</span>
@@ -221,9 +248,14 @@ export const HRDashboard = () => {
                   </td>
                   <td className="px-6 py-4">
                     <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${emp.level === 'critical' ? 'bg-red-50 text-red-600' :
-                        emp.level === 'moderate' ? 'bg-amber-50 text-amber-600' :
-                          'bg-orange-50 text-orange-600'
+                      emp.level === 'moderate' ? 'bg-amber-50 text-amber-600' :
+                        'bg-orange-50 text-orange-600'
                       }`}>{emp.level}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="min-w-[100px]">
+                      <BadgeGrid badges={emp.badges} size="sm" />
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <span className="text-xs font-bold text-gray-500">
@@ -243,6 +275,90 @@ export const HRDashboard = () => {
             <p className="text-xs">All team members are currently within healthy ranges.</p>
           </div>
         )}
+      </motion.div>
+
+      {/* Employee & Salary Management */}
+      <motion.div {...fadeIn} transition={{ delay: 0.5 }} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-100 flex items-center gap-2">
+          <DollarSign size={18} className="text-emerald-600" />
+          <h3 className="font-black text-gray-900 text-sm uppercase tracking-widest">Employee Management & Salaries</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Employee</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Role</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Education</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Milestones</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Reputation</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Current Salary</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {allUsers.map(emp => (
+                <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xs">
+                        {emp.name?.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900">{emp.name}</p>
+                        <p className="text-[10px] text-gray-400 font-medium">{emp.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 py-1 px-2 bg-slate-100 rounded-full">
+                      {emp.role?.replace('_', ' ')}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-xs">
+                      <p className="font-bold text-gray-700">{emp.degree || 'N/A'}</p>
+                      <p className="text-gray-400">{emp.education || 'Not specified'}</p>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="min-w-[120px]">
+                      <BadgeGrid badges={emp.badges} size="sm" />
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-1.5 font-black text-indigo-700 text-xs">
+                      <Trophy size={14} className="text-indigo-500" />
+                      {emp.reputation_score || 3000}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2 max-w-[150px]">
+                      <span className="text-gray-400 font-bold">$</span>
+                      <input
+                        type="number"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-sm font-black focus:ring-2 focus:ring-indigo-500 outline-none"
+                        value={editingSalary[emp.id] !== undefined ? editingSalary[emp.id] : (emp.salary || 0)}
+                        onChange={(e) => setEditingSalary({ ...editingSalary, [emp.id]: e.target.value })}
+                      />
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {editingSalary[emp.id] !== undefined && (
+                      <button
+                        onClick={() => handleSalaryUpdate(emp.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all"
+                      >
+                        <Save size={12} />
+                        Save
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </motion.div>
     </div>
   );

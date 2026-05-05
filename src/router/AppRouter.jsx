@@ -12,7 +12,7 @@ import { HRDashboard } from '@/pages/HRDashboard';
 import { ManagerDashboard } from '@/pages/ManagerDashboard';
 import { TeamLeaderDashboard } from '@/pages/TeamLeaderDashboard';
 import { DeveloperDashboard } from '@/pages/DeveloperDashboard';
-import { DeveloperTasks } from '@/pages/DeveloperTasks';
+import DeveloperTasks from '@/pages/DeveloperTasksV2';
 import { ProjectsPage } from '@/pages/ProjectsPage';
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage';
 import { AnalyticsPage } from '@/pages/AnalyticsPage';

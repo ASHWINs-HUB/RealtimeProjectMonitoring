@@ -6,8 +6,9 @@ import { motion } from 'framer-motion';
 import { RiskAlertBanner, RiskScoreGauge } from '@/components/ui/RiskAlerts';
 import {
   Users, BarChart3, Clock, AlertTriangle, RefreshCw,
-  TrendingDown, Shield, Activity, GitPullRequest, Layers
+  TrendingDown, Shield, Activity, GitPullRequest, Layers, Trophy
 } from 'lucide-react';
+import { BadgeGrid } from '@/components/profile/BadgeGrid';
 
 /**
  * Team Leader Dashboard — Role-specific
@@ -102,8 +103,8 @@ export const TeamLeaderDashboard = () => {
         <motion.div {...fadeIn} className="bg-gradient-to-br from-gray-900 to-indigo-950 p-6 rounded-[2rem] text-white shadow-2xl flex flex-col items-center justify-center">
           <RiskScoreGauge score={teamRisk} label="Team Risk" size="lg" thresholds={thresholds} />
           <span className={`mt-3 text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${metrics?.risk_level === 'danger' ? 'bg-red-500/20 text-red-300' :
-              metrics?.risk_level === 'warning' ? 'bg-amber-500/20 text-amber-300' :
-                'bg-emerald-500/20 text-emerald-300'
+            metrics?.risk_level === 'warning' ? 'bg-amber-500/20 text-amber-300' :
+              'bg-emerald-500/20 text-emerald-300'
             }`}>
             {metrics?.risk_level === 'danger' ? 'High Risk' : metrics?.risk_level === 'warning' ? 'Moderate Risk' : 'On Track'}
           </span>
@@ -169,6 +170,8 @@ export const TeamLeaderDashboard = () => {
               <tr>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Member</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Performance</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Milestones</th>
+                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Reputation</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Risk Score</th>
                 <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
               </tr>
@@ -190,10 +193,21 @@ export const TeamLeaderDashboard = () => {
                       <span className="font-black text-gray-900">{m.performance}%</span>
                     </td>
                     <td className="px-6 py-4">
+                      <div className="min-w-[100px]">
+                        <BadgeGrid badges={m.badges} size="sm" />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1.5 font-black text-indigo-700 text-xs w-fit border border-indigo-50 bg-indigo-50/30 py-1 px-2 rounded-lg">
+                        <Trophy size={14} className="text-indigo-500" />
+                        {m.reputation_score || 3000}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${riskLevel === 'danger' ? 'bg-red-500' :
-                              riskLevel === 'warning' ? 'bg-amber-500' : 'bg-emerald-500'
+                            riskLevel === 'warning' ? 'bg-amber-500' : 'bg-emerald-500'
                             }`} style={{ width: `${m.risk_score}%` }} />
                         </div>
                         <span className="text-xs font-black text-gray-700">{m.risk_score}%</span>
@@ -201,8 +215,8 @@ export const TeamLeaderDashboard = () => {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${riskLevel === 'danger' ? 'bg-red-50 text-red-600' :
-                          riskLevel === 'warning' ? 'bg-amber-50 text-amber-600' :
-                            'bg-emerald-50 text-emerald-600'
+                        riskLevel === 'warning' ? 'bg-amber-50 text-amber-600' :
+                          'bg-emerald-50 text-emerald-600'
                         }`}>
                         {riskLevel === 'danger' ? 'HIGH RISK' : riskLevel === 'warning' ? 'MODERATE' : 'HEALTHY'}
                       </span>

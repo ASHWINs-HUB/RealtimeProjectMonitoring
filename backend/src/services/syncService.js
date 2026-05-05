@@ -44,6 +44,16 @@ class SyncService {
                 const jiraStatus = issue.fields.status.name;
                 const internalStatus = this.mapJiraStatus(jiraStatus);
 
+                // Pull extra fields from Jira for enriching AI features
+                const storyPoints = issue.fields?.story_points
+                    || issue.fields?.customfield_10028  // common Jira SP field
+                    || issue.fields?.customfield_10016  // next-gen Jira SP field
+                    || null;
+                const jiraPriority = issue.fields?.priority?.name?.toLowerCase() || null;
+                const issueType = issue.fields?.issuetype?.name?.toLowerCase() || 'task';
+                const isBlocked = ['blocked', 'impediment'].includes(jiraStatus.toLowerCase());
+                const isBug = issueType === 'bug';
+
                 const taskMapping = await pool.query(
                     'SELECT task_id FROM jira_mapping WHERE jira_issue_key = $1 AND project_id = $2',
                     [jiraKey, projectId]
@@ -51,10 +61,36 @@ class SyncService {
 
                 if (taskMapping.rows.length > 0) {
                     const taskId = taskMapping.rows[0].task_id;
+
+                    // Build dynamic update: always update status; optionally update story_points and priority
+                    const updates = ['status = $1', 'updated_at = CURRENT_TIMESTAMP'];
+                    const params = [internalStatus];
+
+                    if (storyPoints !== null) {
+                        updates.push(`story_points = $${params.length + 1}`);
+                        params.push(Math.round(storyPoints));
+                    }
+
+                    if (jiraPriority) {
+                        const priorityMap = { lowest: 'low', low: 'low', medium: 'medium', high: 'high', highest: 'critical' };
+                        updates.push(`priority = $${params.length + 1}`);
+                        params.push(priorityMap[jiraPriority] || 'medium');
+                    }
+
+                    // If Jira says this issue is a Bug, mark title with [BUG] prefix to aid bug_density calc
+                    if (isBug) {
+                        const taskTitle = await pool.query('SELECT title FROM tasks WHERE id = $1', [taskId]);
+                        const existingTitle = taskTitle.rows[0]?.title || '';
+                        if (!existingTitle.startsWith('[BUG]')) {
+                            updates.push(`title = $${params.length + 1}`);
+                            params.push(`[BUG] ${existingTitle}`);
+                        }
+                    }
+
+                    params.push(taskId);
                     await pool.query(
-                        `UPDATE tasks SET status = $1, updated_at = CURRENT_TIMESTAMP 
-                         WHERE id = $2 AND status != $1`,
-                        [internalStatus, taskId]
+                        `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${params.length} AND status != $1`,
+                        params
                     );
                 }
             }

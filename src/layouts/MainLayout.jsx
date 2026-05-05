@@ -22,12 +22,14 @@ const ROLE_NAV = {
     { path: '/dashboard', label: 'Proposals', icon: Briefcase },
     { path: '/projects', label: 'My Projects', icon: FolderKanban },
     { path: '/analytics', label: 'Portfolio Stats', icon: BarChart3 },
+    { path: '/settings', label: 'Settings', icon: Settings },
   ],
   hr: [
     { path: '/dashboard', label: 'Dashboard', icon: Home },
     { path: '/projects', label: 'Projects', icon: FolderKanban },
     { path: '/analytics', label: 'Analytics', icon: BarChart3 },
     { path: '/insights', label: 'Insights', icon: Lightbulb },
+    { path: '/settings', label: 'Settings', icon: Settings },
   ],
   manager: [
     { path: '/dashboard', label: 'Dashboard', icon: Home },
@@ -35,17 +37,20 @@ const ROLE_NAV = {
     { path: '/team', label: 'Team', icon: Users },
     { path: '/analytics', label: 'Analytics', icon: BarChart3 },
     { path: '/insights', label: 'Insights', icon: Lightbulb },
+    { path: '/settings', label: 'Settings', icon: Settings },
   ],
   team_leader: [
     { path: '/dashboard', label: 'Dashboard', icon: Home },
     { path: '/projects', label: 'Projects', icon: FolderKanban },
     { path: '/team-analytics', label: 'Team Analytics', icon: BarChart3 },
     { path: '/team-members', label: 'Team Members', icon: Users },
+    { path: '/settings', label: 'Settings', icon: Settings },
   ],
   developer: [
     { path: '/dashboard', label: 'Dashboard', icon: Home },
     { path: '/tasks', label: 'My Tasks', icon: CheckSquare },
     { path: '/analytics', label: 'Analytics', icon: BarChart3 },
+    { path: '/settings', label: 'Settings', icon: Settings },
   ]
 };
 
@@ -328,14 +333,14 @@ export const MainLayout = ({ children }) => {
         </main>
 
         {/* Professional Dark Footer */}
-        <footer className="mt-auto bg-[#040405] border-t border-slate-800/30 pt-16 pb-8 px-8 overflow-hidden relative">
+        <footer className="mt-auto bg-[#040405] border-t border-slate-800/30 pt-6 pb-4 px-8 overflow-hidden relative">
           {/* Subtle Indigo Glow background accent */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[1px] bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
 
           <div className="max-w-7xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-12 mb-16">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 mb-4">
               {/* Brand Section */}
-              <div className="md:col-span-4 space-y-6">
+              <div className="md:col-span-4 space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
                     <Zap size={20} className="text-white fill-current" />
@@ -345,11 +350,10 @@ export const MainLayout = ({ children }) => {
                     <span className="text-[10px] text-indigo-400 tracking-[0.4em] font-black mt-1">AI HUB</span>
                   </h1>
                 </div>
-                <p className="text-sm font-medium text-slate-400 leading-relaxed max-w-sm">
-                  The ultimate command center for modern engineering teams.
-                  Leveraging predictive ML to turn raw development data into actionable delivery insights.
+                <p className="text-[13px] font-medium text-slate-400 leading-snug max-w-sm">
+                  Ultimate command center for engineering teams. Turning raw data into actionable delivery insights.
                 </p>
-                <div className="flex items-center gap-4 pt-2">
+                <div className="flex items-center gap-4 pt-1">
                   <a href="#" className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white hover:border-slate-600 transition-all">
                     <GitBranch size={16} />
                   </a>
@@ -363,9 +367,9 @@ export const MainLayout = ({ children }) => {
               </div>
 
               {/* Navigation Group 1 */}
-              <div className="md:col-span-2 space-y-6">
+              <div className="md:col-span-2 space-y-3">
                 <h4 className="text-[11px] font-black text-white uppercase tracking-widest border-l-2 border-indigo-600 pl-3">Ecosystem</h4>
-                <ul className="space-y-3">
+                <ul className="space-y-2">
                   {[
                     { label: 'Portfolio View', icon: FolderKanban },
                     { label: 'ML Analytics', icon: BarChart3 },
@@ -383,9 +387,9 @@ export const MainLayout = ({ children }) => {
               </div>
 
               {/* Navigation Group 2 */}
-              <div className="md:col-span-2 space-y-6">
+              <div className="md:col-span-2 space-y-3">
                 <h4 className="text-[11px] font-black text-white uppercase tracking-widest border-l-2 border-indigo-600 pl-3">Solutions</h4>
-                <ul className="space-y-3 font-bold">
+                <ul className="space-y-2 font-bold">
                   {['Jira Real-time', 'GitHub Webhooks', 'Risk Prediction', 'Resource Loading'].map(item => (
                     <li key={item}>
                       <a href="#" className="text-[13px] text-slate-500 hover:text-white transition-colors">
@@ -397,11 +401,11 @@ export const MainLayout = ({ children }) => {
               </div>
 
               {/* Status Section */}
-              <div className="md:col-span-4 space-y-6">
+              <div className="md:col-span-4 space-y-3">
                 <h4 className="text-[11px] font-black text-white uppercase tracking-widest border-l-2 border-indigo-600 pl-3">Infrastructure</h4>
-                <div className="space-y-4">
-                  <div className="bg-[#0e0e11] border border-slate-800/60 rounded-2xl p-5 shadow-inner">
-                    <div className="flex items-center justify-between mb-4">
+                <div className="space-y-2">
+                  <div className="bg-[#0e0e11] border border-slate-800/60 rounded-2xl p-3 shadow-inner">
+                    <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">System Engine v4.0</span>
@@ -423,7 +427,7 @@ export const MainLayout = ({ children }) => {
               </div>
             </div>
 
-            <div className="pt-8 border-t border-slate-800/40 flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="pt-4 border-t border-slate-800/40 flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="flex items-center gap-4">
                 <p className="text-[11px] font-black text-slate-600 uppercase tracking-widest">
                   © {new Date().getFullYear()} PROJECTPULSE
